@@ -76,43 +76,43 @@ type TwentyBits = [bool; 20];
 
 // Instruction Formats
 #[derive(Clone, Copy, Debug)]
-struct R {
+pub struct R {
     rd: FiveBits,
     rs1: FiveBits,
     rs2: FiveBits,
 }
 #[derive(Clone, Copy, Debug)]
-struct I {
+pub struct I {
     rd: FiveBits,
     rs1: FiveBits,
     imm: TwelveBits,
 }
 #[derive(Clone, Copy, Debug)]
-struct S {
+pub struct S {
     imm: TwelveBits,
     rs1: FiveBits,
     rs2: FiveBits,
 }
 #[derive(Clone, Copy, Debug)]
-struct U {
+pub struct U {
     rd: FiveBits,
     imm: TwentyBits,
 }
 #[derive(Clone, Copy, Debug)]
 // Immediate mode variants
-struct B {
+pub struct B {
     imm: TwelveBits,
     rs1: FiveBits,
     rs2: FiveBits,
 } // Variant of S
 #[derive(Clone, Copy, Debug)]
-struct J {
+pub struct J {
     rd: FiveBits,
     imm: TwentyBits,
 } // Variant of U
 
 #[derive(Debug)]
-enum Instruction {
+pub enum Instruction {
     ADD { data: R },
     SUB { data: R },
     XOR { data: R },
@@ -166,6 +166,14 @@ struct ArchState {
     pc: u32,
 }
 
+fn transmute_to_signed(unsigned: u32) -> i32 {
+    unsafe { std::mem::transmute(unsigned) }
+}
+
+fn transmute_to_unsigned(signed: i32) -> u32 {
+    unsafe { std::mem::transmute(signed) }
+}
+
 impl ArchState {
     pub fn new() -> Self {
         Self {
@@ -187,6 +195,7 @@ impl ArchState {
 
     pub fn apply(&mut self, inst: &Instruction) {
         match inst {
+            // Register Arithmetic
             Instruction::ADD { data } => self.set_register(
                 data.rd.unsigned() as usize,
                 self.get_register(data.rs1.unsigned() as usize)
@@ -212,6 +221,22 @@ impl ArchState {
                 self.get_register(data.rs1.unsigned() as usize)
                     & self.get_register(data.rs2.unsigned() as usize),
             ),
+            Instruction::SLL { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                self.get_register(data.rs1.unsigned() as usize)
+                    << self.get_register(data.rs2.unsigned() as usize),
+            ),
+            Instruction::SRL { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                self.get_register(data.rs1.unsigned() as usize)
+                    >> self.get_register(data.rs2.unsigned() as usize),
+            ),
+            Instruction::SRA { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                transmute_to_unsigned(transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    >> self.get_register(data.rs2.unsigned() as usize)),
+            ),
+            // Register Comparisons
             _ => {panic!("Instruction Not Implemented!!")}
         }
         self.pc += 4;
@@ -231,6 +256,9 @@ fn test_arithmetic() {
         (Instruction::XOR { data: data.clone() }, 0),
         (Instruction::OR  { data: data.clone() }, 1),
         (Instruction::AND { data: data.clone() }, 1),
+        (Instruction::SLL { data: data.clone() }, 2),
+        (Instruction::SRL { data: data.clone() }, 0),
+        (Instruction::SRA { data: data.clone() }, 0)
     ] {
       let mut state = ArchState::new();
       state.set_register(2, 1);
@@ -239,4 +267,39 @@ fn test_arithmetic() {
       println!("Test {:?}", &inst);
       assert_eq!(expected, state.get_register(1));
     }
+}
+
+#[test]
+fn test_shift_right_logical() {
+    let mut state = ArchState::new();
+    state.set_register(2, 2_u32.pow(31));
+    state.set_register(3, 1);
+    let data = R {
+        rd: [false, false, false, false, true],
+        rs1: [false, false, false, true, false],
+        rs2: [false, false, false, true, true],
+    };
+    let inst = Instruction::SRL { data };
+    state.apply(&inst);
+    println!("rs1: {:#034b}, rs2:      {:#034b}", state.get_register(2), state.get_register(3));
+    println!("rd:  {:#034b}, expected: {:#034b}", state.get_register(1), 2_u32.pow(31));
+    assert_eq!(2_u32.pow(30), state.get_register(1));
+}
+
+
+#[test]
+fn test_shift_right_arithmetic() {
+    let mut state = ArchState::new();
+    state.set_register(2, 2_u32.pow(31));
+    state.set_register(3, 1);
+    let data = R {
+        rd: [false, false, false, false, true],
+        rs1: [false, false, false, true, false],
+        rs2: [false, false, false, true, true],
+    };
+    let inst = Instruction::SRA { data };
+    state.apply(&inst);
+    println!("rs1: {:#034b}, rs2:      {:#034b}", state.get_register(2), state.get_register(3));
+    println!("rd:  {:#034b}, expected: {:#034b}", state.get_register(1), 2_u32.pow(30) + 2_u32.pow(31));
+    assert_eq!(2_u32.pow(30) + 2_u32.pow(31), state.get_register(1));
 }
