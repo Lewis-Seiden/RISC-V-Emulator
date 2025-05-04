@@ -234,19 +234,35 @@ impl ArchState {
             ),
             Instruction::SRA { data } => self.set_register(
                 data.rd.unsigned() as usize,
-                transmute_to_unsigned(transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
-                    >> self.get_register(data.rs2.unsigned() as usize)),
+                transmute_to_unsigned(
+                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                        >> self.get_register(data.rs2.unsigned() as usize),
+                ),
             ),
             // Register Comparisons
             Instruction::SLT { data } => self.set_register(
                 data.rd.unsigned() as usize,
-                if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize)) < transmute_to_signed(self.get_register(data.rs2.unsigned() as usize)) {1} else {0},
+                if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    < transmute_to_signed(self.get_register(data.rs2.unsigned() as usize))
+                {
+                    1
+                } else {
+                    0
+                },
             ),
             Instruction::SLTU { data } => self.set_register(
                 data.rd.unsigned() as usize,
-                if self.get_register(data.rs1.unsigned() as usize) < self.get_register(data.rs2.unsigned() as usize) {1} else {0},
+                if self.get_register(data.rs1.unsigned() as usize)
+                    < self.get_register(data.rs2.unsigned() as usize)
+                {
+                    1
+                } else {
+                    0
+                },
             ),
-            _ => {panic!("Instruction Not Implemented!!")}
+            _ => {
+                panic!("Instruction Not Implemented!!")
+            }
         }
         self.pc += 4;
     }
@@ -263,18 +279,18 @@ fn test_arithmetic() {
         (Instruction::ADD { data: data.clone() }, 2),
         (Instruction::SUB { data: data.clone() }, 0),
         (Instruction::XOR { data: data.clone() }, 0),
-        (Instruction::OR  { data: data.clone() }, 1),
+        (Instruction::OR { data: data.clone() }, 1),
         (Instruction::AND { data: data.clone() }, 1),
         (Instruction::SLL { data: data.clone() }, 2),
         (Instruction::SRL { data: data.clone() }, 0),
-        (Instruction::SRA { data: data.clone() }, 0)
+        (Instruction::SRA { data: data.clone() }, 0),
     ] {
-      let mut state = ArchState::new();
-      state.set_register(2, 1);
-      state.set_register(3, 1);
-      state.apply(&inst);
-      println!("Test {:?}", &inst);
-      assert_eq!(expected, state.get_register(1));
+        let mut state = ArchState::new();
+        state.set_register(2, 1);
+        state.set_register(3, 1);
+        state.apply(&inst);
+        println!("Test {:?}", &inst);
+        assert_eq!(expected, state.get_register(1));
     }
 }
 
@@ -290,8 +306,16 @@ fn test_shift_right_logical() {
     };
     let inst = Instruction::SRL { data };
     state.apply(&inst);
-    println!("rs1: {:#034b}, rs2:      {:#034b}", state.get_register(2), state.get_register(3));
-    println!("rd:  {:#034b}, expected: {:#034b}", state.get_register(1), 2_u32.pow(31));
+    println!(
+        "rs1: {:#034b}, rs2:      {:#034b}",
+        state.get_register(2),
+        state.get_register(3)
+    );
+    println!(
+        "rd:  {:#034b}, expected: {:#034b}",
+        state.get_register(1),
+        2_u32.pow(31)
+    );
     assert_eq!(2_u32.pow(30), state.get_register(1));
 }
 
@@ -307,8 +331,16 @@ fn test_shift_right_arithmetic() {
     };
     let inst = Instruction::SRA { data };
     state.apply(&inst);
-    println!("rs1: {:#034b}, rs2:      {:#034b}", state.get_register(2), state.get_register(3));
-    println!("rd:  {:#034b}, expected: {:#034b}", state.get_register(1), 2_u32.pow(30) + 2_u32.pow(31));
+    println!(
+        "rs1: {:#034b}, rs2:      {:#034b}",
+        state.get_register(2),
+        state.get_register(3)
+    );
+    println!(
+        "rd:  {:#034b}, expected: {:#034b}",
+        state.get_register(1),
+        2_u32.pow(30) + 2_u32.pow(31)
+    );
     assert_eq!(2_u32.pow(30) + 2_u32.pow(31), state.get_register(1));
 }
 
