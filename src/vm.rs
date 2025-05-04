@@ -283,8 +283,7 @@ impl ArchState {
                 ),
             ),
             Instruction::ANDI { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                transmute_to_unsigned(
+                data.rd.unsigned() as usize, transmute_to_unsigned(
                     transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
                         & data.imm.sign_extend(),
                 ),
