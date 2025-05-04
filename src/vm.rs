@@ -186,11 +186,11 @@ impl ArchState {
         if reg == 0 {
             return 0;
         }
-        self.regs[reg + 1]
+        self.regs[reg - 1]
     }
 
     fn set_register(&mut self, reg: usize, val: u32) {
-        self.regs[reg + 1] = val;
+        self.regs[reg - 1] = val;
     }
 
     pub fn apply(&mut self, inst: &Instruction) {
@@ -221,6 +221,7 @@ impl ArchState {
                 self.get_register(data.rs1.unsigned() as usize)
                     & self.get_register(data.rs2.unsigned() as usize),
             ),
+            // Shifts
             Instruction::SLL { data } => self.set_register(
                 data.rd.unsigned() as usize,
                 self.get_register(data.rs1.unsigned() as usize)
@@ -237,6 +238,14 @@ impl ArchState {
                     >> self.get_register(data.rs2.unsigned() as usize)),
             ),
             // Register Comparisons
+            Instruction::SLT { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize)) < transmute_to_signed(self.get_register(data.rs2.unsigned() as usize)) {1} else {0},
+            ),
+            Instruction::SLTU { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                if self.get_register(data.rs1.unsigned() as usize) < self.get_register(data.rs2.unsigned() as usize) {1} else {0},
+            ),
             _ => {panic!("Instruction Not Implemented!!")}
         }
         self.pc += 4;
@@ -286,7 +295,6 @@ fn test_shift_right_logical() {
     assert_eq!(2_u32.pow(30), state.get_register(1));
 }
 
-
 #[test]
 fn test_shift_right_arithmetic() {
     let mut state = ArchState::new();
@@ -302,4 +310,24 @@ fn test_shift_right_arithmetic() {
     println!("rs1: {:#034b}, rs2:      {:#034b}", state.get_register(2), state.get_register(3));
     println!("rd:  {:#034b}, expected: {:#034b}", state.get_register(1), 2_u32.pow(30) + 2_u32.pow(31));
     assert_eq!(2_u32.pow(30) + 2_u32.pow(31), state.get_register(1));
+}
+
+#[test]
+fn test_comparison() {
+    let mut state = ArchState::new();
+    state.set_register(2, 1);
+    state.set_register(3, 2);
+    let data = R {
+        rd: [false, false, false, false, true],
+        rs1: [false, false, false, true, false],
+        rs2: [false, false, false, true, true],
+    };
+    // signed
+    let inst = Instruction::SLT { data };
+    state.apply(&inst);
+    assert_eq!(1, state.get_register(1));
+    // unsigned
+    let inst = Instruction::SLTU { data };
+    state.apply(&inst);
+    assert_eq!(1, state.get_register(1));
 }
