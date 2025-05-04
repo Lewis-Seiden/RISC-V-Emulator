@@ -75,36 +75,43 @@ type TwelveBits = [bool; 12];
 type TwentyBits = [bool; 20];
 
 // Instruction Formats
+#[derive(Clone, Copy, Debug)]
 struct R {
     rd: FiveBits,
     rs1: FiveBits,
     rs2: FiveBits,
 }
+#[derive(Clone, Copy, Debug)]
 struct I {
     rd: FiveBits,
     rs1: FiveBits,
     imm: TwelveBits,
 }
+#[derive(Clone, Copy, Debug)]
 struct S {
     imm: TwelveBits,
     rs1: FiveBits,
     rs2: FiveBits,
 }
+#[derive(Clone, Copy, Debug)]
 struct U {
     rd: FiveBits,
     imm: TwentyBits,
 }
+#[derive(Clone, Copy, Debug)]
 // Immediate mode variants
 struct B {
     imm: TwelveBits,
     rs1: FiveBits,
     rs2: FiveBits,
 } // Variant of S
+#[derive(Clone, Copy, Debug)]
 struct J {
     rd: FiveBits,
     imm: TwentyBits,
 } // Variant of U
 
+#[derive(Debug)]
 enum Instruction {
     ADD { data: R },
     SUB { data: R },
@@ -178,12 +185,32 @@ impl ArchState {
         self.regs[reg + 1] = val;
     }
 
-    pub fn apply(&mut self, inst: Instruction) {
+    pub fn apply(&mut self, inst: &Instruction) {
         match inst {
             Instruction::ADD { data } => self.set_register(
                 data.rd.unsigned() as usize,
                 self.get_register(data.rs1.unsigned() as usize)
                     + self.get_register(data.rs2.unsigned() as usize),
+            ),
+            Instruction::SUB { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                self.get_register(data.rs1.unsigned() as usize)
+                    - self.get_register(data.rs2.unsigned() as usize),
+            ),
+            Instruction::XOR { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                self.get_register(data.rs1.unsigned() as usize)
+                    ^ self.get_register(data.rs2.unsigned() as usize),
+            ),
+            Instruction::OR { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                self.get_register(data.rs1.unsigned() as usize)
+                    | self.get_register(data.rs2.unsigned() as usize),
+            ),
+            Instruction::AND { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                self.get_register(data.rs1.unsigned() as usize)
+                    & self.get_register(data.rs2.unsigned() as usize),
             ),
             _ => {}
         }
@@ -192,16 +219,24 @@ impl ArchState {
 }
 
 #[test]
-fn test_add() {
-    let mut state = ArchState::new();
-    state.set_register(2, 1);
-    state.set_register(3, 1);
-    state.apply(Instruction::ADD {
-        data: R {
-            rd: [false, false, false, false, true],
-            rs1: [false, false, false, true, false],
-            rs2: [false, false, false, true, true],
-        },
-    });
-    assert_eq!(2, state.get_register(1));
+fn test_arithmetic() {
+    let data = R {
+        rd: [false, false, false, false, true],
+        rs1: [false, false, false, true, false],
+        rs2: [false, false, false, true, true],
+    };
+    for (inst, expected) in vec![
+        (Instruction::ADD { data: data.clone() }, 2),
+        (Instruction::SUB { data: data.clone() }, 0),
+        (Instruction::XOR { data: data.clone() }, 0),
+        (Instruction::OR  { data: data.clone() }, 1),
+        (Instruction::AND { data: data.clone() }, 1),
+    ] {
+      let mut state = ArchState::new();
+      state.set_register(2, 1);
+      state.set_register(3, 1);
+      state.apply(&inst);
+      println!("Test {:?}", &inst);
+      assert_eq!(expected, state.get_register(1));
+    }
 }
