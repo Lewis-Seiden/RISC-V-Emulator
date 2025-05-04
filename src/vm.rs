@@ -260,6 +260,35 @@ impl ArchState {
                     0
                 },
             ),
+            // Immediate Arithmetic
+            Instruction::ADDI { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                transmute_to_unsigned(
+                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                        + data.imm.sign_extend(),
+                ),
+            ),
+            Instruction::XORI { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                transmute_to_unsigned(
+                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                        ^ data.imm.sign_extend(),
+                ),
+            ),
+            Instruction::ORI { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                transmute_to_unsigned(
+                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                        | data.imm.sign_extend(),
+                ),
+            ),
+            Instruction::ANDI { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                transmute_to_unsigned(
+                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                        & data.imm.sign_extend(),
+                ),
+            ),
             _ => {
                 panic!("Instruction Not Implemented!!")
             }
@@ -362,4 +391,31 @@ fn test_comparison() {
     let inst = Instruction::SLTU { data };
     state.apply(&inst);
     assert_eq!(1, state.get_register(1));
+}
+
+#[test]
+fn test_immediate_arithmetic() {
+    let data = I {
+        rd: [false, false, false, false, true],
+        rs1: [false, false, false, true, false],
+        imm: [
+            false, false, false, false, false, false, false, false, false, false, false, true,
+        ],
+    };
+    for (inst, expected) in vec![
+        (Instruction::ADDI { data: data.clone() }, 2),
+        (Instruction::XORI { data: data.clone() }, 0),
+        (Instruction::ORI { data: data.clone() }, 1),
+        (Instruction::ANDI { data: data.clone() }, 1),
+        // (Instruction::SLL { data: data.clone() }, 2),
+        // (Instruction::SRL { data: data.clone() }, 0),
+        // (Instruction::SRA { data: data.clone() }, 0),
+    ] {
+        let mut state = ArchState::new();
+        state.set_register(2, 1);
+        state.set_register(3, 1);
+        state.apply(&inst);
+        println!("Test {:?}", &inst);
+        assert_eq!(expected, state.get_register(1));
+    }
 }
