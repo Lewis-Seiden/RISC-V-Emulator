@@ -1,6 +1,5 @@
 type NBits<const C: usize> = [bool; C];
 
-// impl<const C: usize> NBits<C> {
 pub trait Bits {
     fn sign_extend(&self) -> i32;
 
@@ -283,10 +282,52 @@ impl ArchState {
                 ),
             ),
             Instruction::ANDI { data } => self.set_register(
-                data.rd.unsigned() as usize, transmute_to_unsigned(
+                data.rd.unsigned() as usize,
+                transmute_to_unsigned(
                     transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
                         & data.imm.sign_extend(),
                 ),
+            ),
+            // Immediate Shifts
+            Instruction::SLLI { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                self.get_register(data.rs1.unsigned() as usize)
+                    << data.imm.unsigned(),
+            ),
+            Instruction::SRLI { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                self.get_register(data.rs1.unsigned() as usize)
+                // Skip first few bits because arithmetic vs logical shift is encoded in them
+                    >> data.imm.last_chunk::<5>().unwrap().unsigned(),
+            ),
+            Instruction::SRAI { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                transmute_to_unsigned(
+                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    // Skip first few bits because arithmetic vs logical shift is encoded in them
+                        >> data.imm.last_chunk::<5>().unwrap().unsigned(),
+                ),
+            ),
+            // Immediate Comparisons
+            Instruction::SLTI { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    < data.imm.sign_extend()
+                {
+                    1
+                } else {
+                    0
+                },
+            ),
+            Instruction::SLTUI { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                if self.get_register(data.rs1.unsigned() as usize)
+                    < transmute_to_unsigned(data.imm.sign_extend())
+                {
+                    1
+                } else {
+                    0
+                },
             ),
             _ => {
                 panic!("Instruction Not Implemented!!")
@@ -406,15 +447,35 @@ fn test_immediate_arithmetic() {
         (Instruction::XORI { data: data.clone() }, 0),
         (Instruction::ORI { data: data.clone() }, 1),
         (Instruction::ANDI { data: data.clone() }, 1),
-        // (Instruction::SLL { data: data.clone() }, 2),
-        // (Instruction::SRL { data: data.clone() }, 0),
-        // (Instruction::SRA { data: data.clone() }, 0),
+        (Instruction::SLLI { data: data.clone() }, 2),
+        (Instruction::SRLI { data: data.clone() }, 0),
+        (Instruction::SRAI { data: data.clone() }, 0),
     ] {
         let mut state = ArchState::new();
         state.set_register(2, 1);
-        state.set_register(3, 1);
         state.apply(&inst);
         println!("Test {:?}", &inst);
         assert_eq!(expected, state.get_register(1));
     }
+}
+
+#[test]
+fn test_comparison_immediate() {
+    let mut state = ArchState::new();
+    state.set_register(2, 1);
+    let data = I {
+        rd: [false, false, false, false, true],
+        rs1: [false, false, false, true, false],
+        imm: [
+            false, false, false, false, false, false, false, false, false, false, true, false,
+        ],
+    };
+    // signed
+    let inst = Instruction::SLTI { data };
+    state.apply(&inst);
+    assert_eq!(1, state.get_register(1));
+    // unsigned
+    let inst = Instruction::SLTUI { data };
+    state.apply(&inst);
+    assert_eq!(1, state.get_register(1));
 }
