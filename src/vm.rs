@@ -212,7 +212,7 @@ impl ArchState {
                 self.get_register(data.rs1.unsigned() as usize)
                     & self.get_register(data.rs2.unsigned() as usize),
             ),
-            _ => {}
+            _ => {panic!("Instruction Not Implemented!!")}
         }
         self.pc += 4;
     }
