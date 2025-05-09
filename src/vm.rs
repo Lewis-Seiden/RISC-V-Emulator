@@ -179,7 +179,7 @@ impl ArchState {
         Self {
             regs: [0; 31],
             pc: 0,
-            mem: Vec::new(),
+            mem: vec![0; 2_usize.pow(16)],
         }
     }
 
@@ -364,6 +364,30 @@ impl ArchState {
                         })
                         .sum::<u32>(),
                 )
+            }
+            Instruction::SB { data } => {
+                let index = self
+                    .get_register(data.rs1.unsigned() as usize)
+                    .wrapping_add_signed(data.imm.sign_extend() as i32);
+                self.mem[index as usize] = self.get_register(data.rs2.unsigned() as usize) as u8;
+            }
+            Instruction::SH { data } => {
+                let index = self
+                    .get_register(data.rs1.unsigned() as usize)
+                    .wrapping_add_signed(data.imm.sign_extend() as i32);
+                (0..2).for_each(|offset| {
+                    self.mem[index as usize + offset] =
+                        (self.get_register(data.rs2.unsigned() as usize) >> 8 * (1 - offset)) as u8
+                });
+            }
+            Instruction::SW { data } => {
+                let index = self
+                    .get_register(data.rs1.unsigned() as usize)
+                    .wrapping_add_signed(data.imm.sign_extend() as i32);
+                (0..4).for_each(|offset| {
+                    self.mem[index as usize + offset] =
+                        (self.get_register(data.rs2.unsigned() as usize) >> 8 * (3 - offset)) as u8
+                });
             }
             _ => {
                 panic!("Instruction Not Implemented!!")
@@ -587,4 +611,53 @@ fn test_loads() {
         },
     });
     assert_eq!(state.get_register(1), 16909320 << 1);
+}
+
+#[test]
+fn test_stores() {
+    let mut state = ArchState::new();
+
+    state.set_register(1, 1 + (2 << 8) + (4 << 16) + (8 << 24));
+    println!("register 1: {:b}", state.get_register(1));
+
+    state.apply(&Instruction::SB {
+        data: S {
+            imm: [false; 12],
+            rs1: [false; 5],
+            rs2: [false, false, false, false, true],
+        },
+    });
+    assert_eq!(state.mem[0], 1);
+    state.mem[0] = 0;
+
+    state.apply(&Instruction::SH {
+        data: S {
+            imm: [false; 12],
+            rs1: [false; 5],
+            rs2: [false, false, false, false, true],
+        },
+    });
+    println!("{} {}", (state.mem[0] as u32), state.mem[1]);
+    assert_eq!(
+        ((state.mem[0] as u32) << 8) + state.mem[1] as u32,
+        1_u32 + (2 << 8)
+    );
+    state.mem[0] = 0;
+    state.mem[1] = 0;
+
+    state.apply(&Instruction::SW {
+        data: S {
+            imm: [false; 12],
+            rs1: [false; 5],
+            rs2: [false, false, false, false, true],
+        },
+    });
+    println!("{} {}", (state.mem[0] as u32), state.mem[1]);
+    assert_eq!(
+        ((state.mem[0] as u32) << 24)
+            + ((state.mem[1] as u32) << 16)
+            + ((state.mem[2] as u32) << 8)
+            + state.mem[3] as u32,
+        1 + (2 << 8) + (4 << 16) + (8 << 24)
+    );
 }
