@@ -160,9 +160,10 @@ pub enum Instruction {
     EBREAK { data: I },
 }
 
-struct ArchState {
+pub struct ArchState {
     regs: [u32; 31], // x0 is handled in the getter
     pc: u32,
+    mem: Vec<u8>,
 }
 
 fn transmute_to_signed(unsigned: u32) -> i32 {
@@ -178,6 +179,7 @@ impl ArchState {
         Self {
             regs: [0; 31],
             pc: 0,
+            mem: Vec::new(),
         }
     }
 
@@ -291,8 +293,7 @@ impl ArchState {
             // Immediate Shifts
             Instruction::SLLI { data } => self.set_register(
                 data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize)
-                    << data.imm.unsigned(),
+                self.get_register(data.rs1.unsigned() as usize) << data.imm.unsigned(),
             ),
             Instruction::SRLI { data } => self.set_register(
                 data.rd.unsigned() as usize,
@@ -329,6 +330,41 @@ impl ArchState {
                     0
                 },
             ),
+            // Loads
+            Instruction::LB { data } => self.set_register(
+                data.rd.unsigned() as usize,
+                *self
+                    .mem
+                    .get(
+                        (self.get_register(data.rs1.unsigned() as usize) as usize)
+                            .wrapping_add_signed(data.imm.sign_extend() as isize),
+                    )
+                    .unwrap() as u32,
+            ),
+            Instruction::LH { data } => {
+                let index = (self.get_register(data.rs1.unsigned() as usize) as usize)
+                    .wrapping_add_signed(data.imm.sign_extend() as isize);
+                self.set_register(
+                    data.rd.unsigned() as usize,
+                    (0..2)
+                        .map(|offset| {
+                            (*self.mem.get(index + offset).unwrap() as u32) << 8 * (1 - offset)
+                        })
+                        .sum::<u32>(),
+                )
+            }
+            Instruction::LW { data } => {
+                let index = (self.get_register(data.rs1.unsigned() as usize) as usize)
+                    .wrapping_add_signed(data.imm.sign_extend() as isize);
+                self.set_register(
+                    data.rd.unsigned() as usize,
+                    (0..4)
+                        .map(|offset| {
+                            (*self.mem.get(index + offset).unwrap() as u32) << 8 * (3 - offset)
+                        })
+                        .sum::<u32>(),
+                )
+            }
             _ => {
                 panic!("Instruction Not Implemented!!")
             }
@@ -478,4 +514,77 @@ fn test_comparison_immediate() {
     let inst = Instruction::SLTUI { data };
     state.apply(&inst);
     assert_eq!(1, state.get_register(1));
+}
+
+#[test]
+fn test_loads() {
+    let mut state = ArchState::new();
+    state.mem.insert(0, 1);
+    state.mem.insert(1, 2);
+    state.mem.insert(2, 4);
+    state.mem.insert(3, 8);
+    state.mem.insert(4, 16);
+
+    // byte
+    state.apply(&Instruction::LB {
+        data: I {
+            rd: [false, false, false, false, true],
+            rs1: [false; 5],
+            imm: [false; 12],
+        },
+    });
+    assert_eq!(state.get_register(1), 1);
+    // test offset
+    state.apply(&Instruction::LB {
+        data: I {
+            rd: [false, false, false, false, true],
+            rs1: [false; 5],
+            imm: [
+                false, false, false, false, false, false, false, false, false, false, false, true,
+            ],
+        },
+    });
+    assert_eq!(state.get_register(1), 2);
+
+    // half
+    state.apply(&Instruction::LH {
+        data: I {
+            rd: [false, false, false, false, true],
+            rs1: [false; 5],
+            imm: [false; 12],
+        },
+    });
+    assert_eq!(state.get_register(1), 258);
+    // test offset
+    state.apply(&Instruction::LH {
+        data: I {
+            rd: [false, false, false, false, true],
+            rs1: [false; 5],
+            imm: [
+                false, false, false, false, false, false, false, false, false, false, false, true,
+            ],
+        },
+    });
+    assert_eq!(state.get_register(1), 258 << 1);
+
+    // word
+    state.apply(&Instruction::LW {
+        data: I {
+            rd: [false, false, false, false, true],
+            rs1: [false; 5],
+            imm: [false; 12],
+        },
+    });
+    assert_eq!(state.get_register(1), 16909320);
+    // test offset
+    state.apply(&Instruction::LW {
+        data: I {
+            rd: [false, false, false, false, true],
+            rs1: [false; 5],
+            imm: [
+                false, false, false, false, false, false, false, false, false, false, false, true,
+            ],
+        },
+    });
+    assert_eq!(state.get_register(1), 16909320 << 1);
 }
