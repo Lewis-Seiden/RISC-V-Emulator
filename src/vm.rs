@@ -331,7 +331,7 @@ impl ArchState {
                 },
             ),
             // Loads
-            Instruction::LB { data } => self.set_register(
+            Instruction::LBU { data } => self.set_register(
                 data.rd.unsigned() as usize,
                 *self
                     .mem
@@ -341,7 +341,7 @@ impl ArchState {
                     )
                     .unwrap() as u32,
             ),
-            Instruction::LH { data } => {
+            Instruction::LHU { data } => {
                 let index = (self.get_register(data.rs1.unsigned() as usize) as usize)
                     .wrapping_add_signed(data.imm.sign_extend() as isize);
                 self.set_register(
@@ -351,6 +351,46 @@ impl ArchState {
                             (*self.mem.get(index + offset).unwrap() as u32) << 8 * (1 - offset)
                         })
                         .sum::<u32>(),
+                )
+            }
+            Instruction::LB { data } => {
+                let val = *self
+                    .mem
+                    .get(
+                        (self.get_register(data.rs1.unsigned() as usize) as usize)
+                            .wrapping_add_signed(data.imm.sign_extend() as isize),
+                    )
+                    .unwrap() as u32;
+                self.set_register(
+                    data.rd.unsigned() as usize,
+                    // sign extension magic
+                    // check if most significant defined bit is 1
+                    // if so, set remaining significant bits to 1 with magic number
+                    val + if val & 0b10000000 == 128 {
+                        0xFFFFFF00
+                    } else {
+                        0
+                    },
+                );
+            }
+            Instruction::LH { data } => {
+                let index = (self.get_register(data.rs1.unsigned() as usize) as usize)
+                    .wrapping_add_signed(data.imm.sign_extend() as isize);
+                let val = (0..2)
+                    .map(|offset| {
+                        (*self.mem.get(index + offset).unwrap() as u32) << 8 * (1 - offset)
+                    })
+                    .sum::<u32>();
+                self.set_register(
+                    data.rd.unsigned() as usize,
+                    // sign extension magic
+                    // check if most significant defined bit is 1
+                    // if so, set remaining significant bits to 1 with magic number
+                    val + if val & (1 << 15) == 1 << 15 {
+                        0xFFFF0000
+                    } else {
+                        0
+                    },
                 )
             }
             Instruction::LW { data } => {
@@ -660,4 +700,37 @@ fn test_stores() {
             + state.mem[3] as u32,
         1 + (2 << 8) + (4 << 16) + (8 << 24)
     );
+}
+
+#[test]
+fn test_store_signs() {
+    let mut state = ArchState::new();
+    // byte loads
+    state.mem[0] = 0b10000000;
+    let test = I {
+        imm: [false; 12],
+        rs1: [false, false, false, false, true],
+        rd: [false, false, true, false, false],
+    };
+    // unsigned load will 0 pad
+    state.apply(&Instruction::LBU { data: test });
+    println!("unsigned byte: {:b}", state.get_register(4));
+    assert_eq!(state.get_register(4), 128);
+    // signed will sign extend
+    state.apply(&Instruction::LB { data: test });
+    println!("signed byte: {:b}", state.get_register(4));
+    assert_eq!(transmute_to_signed(state.get_register(4)), -128);
+
+    // half loads
+    let val = 1_u32 << 15;
+    state.mem[0] = (val >> 8) as u8;
+    state.mem[1] = val as u8;
+    // unsigned load will 0 pad
+    state.apply(&Instruction::LHU { data: test });
+    println!("unsigned half: {:b}", state.get_register(4));
+    assert_eq!(state.get_register(4), 1 << 15);
+    // signed will sign extend
+    state.apply(&Instruction::LH { data: test });
+    println!("signed half: {:b}", state.get_register(4));
+    assert_eq!(transmute_to_signed(state.get_register(4)), -(1_i32 << 15));
 }
