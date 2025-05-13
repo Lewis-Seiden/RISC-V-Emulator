@@ -70,8 +70,58 @@ fn test_unsigned() {
 }
 
 type RegisterPointer = u8;
-type TwelveBits = [bool; 12];
-type TwentyBits = [bool; 20];
+/** 12 Bit Immediate */
+#[derive(Clone, Copy, Debug)]
+struct SmallImmediate {
+    val: u32,
+}
+/** 20 Bit Immediate */
+#[derive(Clone, Copy, Debug)]
+struct BigImmediate {
+    val: u32,
+}
+
+impl Into<u32> for SmallImmediate {
+    fn into(self) -> u32 {
+        self.val
+    }
+}
+
+impl From<u32> for SmallImmediate {
+    fn from(value: u32) -> Self {
+        Self { val: value }
+    }
+}
+
+impl Into<u32> for BigImmediate {
+    fn into(self) -> u32 {
+        self.val
+    }
+}
+
+impl From<u32> for BigImmediate {
+    fn from(value: u32) -> Self {
+        Self { val: value }
+    }
+}
+
+trait SignExtend {
+    fn sign_extend(&self) -> i32;
+}
+
+impl SignExtend for SmallImmediate {
+    fn sign_extend(&self) -> i32 {
+        let msb = self.val & 1 << 11 == 1;
+        transmute_to_signed(if msb { self.val + 0xFFFFF000 } else { self.val })
+    }
+}
+
+impl SignExtend for BigImmediate {
+    fn sign_extend(&self) -> i32 {
+        let msb = self.val & 1 << 11 == 1;
+        transmute_to_signed(if msb { self.val + 0xFFFFF000 } else { self.val })
+    }
+}
 
 // Instruction Formats
 #[derive(Clone, Copy, Debug)]
@@ -84,30 +134,30 @@ pub struct R {
 pub struct I {
     rd: RegisterPointer,
     rs1: RegisterPointer,
-    imm: TwelveBits,
+    imm: SmallImmediate,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct S {
-    imm: TwelveBits,
+    imm: SmallImmediate,
     rs1: RegisterPointer,
     rs2: RegisterPointer,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct U {
     rd: RegisterPointer,
-    imm: TwentyBits,
+    imm: BigImmediate,
 }
 #[derive(Clone, Copy, Debug)]
 // Immediate mode variants
 pub struct B {
-    imm: TwelveBits,
+    imm: SmallImmediate,
     rs1: RegisterPointer,
     rs2: RegisterPointer,
 } // Variant of S
 #[derive(Clone, Copy, Debug)]
 pub struct J {
     rd: RegisterPointer,
-    imm: TwentyBits,
+    imm: BigImmediate,
 } // Variant of U
 
 #[derive(Debug)]
@@ -179,7 +229,7 @@ fn interpret_bytes(bytes: u32) -> Instruction {
         data: I {
             rd: 0,
             rs1: 0,
-            imm: [false; 12],
+            imm: SmallImmediate::from(0),
         },
     }
 }
@@ -302,20 +352,22 @@ impl ArchState {
             // Immediate Shifts
             Instruction::SLLI { data } => self.set_register(
                 data.rd as usize,
-                self.get_register(data.rs1 as usize) << data.imm.unsigned(),
+                self.get_register(data.rs1 as usize) << data.imm.val,
             ),
             Instruction::SRLI { data } => self.set_register(
                 data.rd as usize,
                 self.get_register(data.rs1 as usize)
                 // Skip first few bits because arithmetic vs logical shift is encoded in them
-                    >> data.imm.last_chunk::<5>().unwrap().unsigned(),
+                    >> data.imm.val
+                    & 0b11111,
             ),
             Instruction::SRAI { data } => self.set_register(
                 data.rd as usize,
                 transmute_to_unsigned(
                     transmute_to_signed(self.get_register(data.rs1 as usize))
                     // Skip first few bits because arithmetic vs logical shift is encoded in them
-                        >> data.imm.last_chunk::<5>().unwrap().unsigned(),
+                        >> data.imm.val
+                        & 0b11111,
                 ),
             ),
             // Immediate Comparisons
@@ -511,13 +563,10 @@ impl ArchState {
                     - 4;
             }
             Instruction::LUI { data } => {
-                self.set_register(data.rd as usize, data.imm.unsigned() << 12);
+                self.set_register(data.rd as usize, data.imm.val << 12);
             }
             Instruction::AUIPC { data } => {
-                self.set_register(
-                    data.rd as usize,
-                    self.pc as u32 + (data.imm.unsigned() << 12),
-                );
+                self.set_register(data.rd as usize, self.pc as u32 + (data.imm.val << 12));
             }
             _ => {
                 panic!("Instruction Not Implemented!!")
@@ -628,9 +677,7 @@ fn test_immediate_arithmetic() {
     let data = I {
         rd: 1,
         rs1: 2,
-        imm: [
-            false, false, false, false, false, false, false, false, false, false, false, true,
-        ],
+        imm: SmallImmediate::from(1),
     };
     for (inst, expected) in vec![
         (Instruction::ADDI { data: data.clone() }, 2),
@@ -656,9 +703,7 @@ fn test_comparison_immediate() {
     let data = I {
         rd: 1,
         rs1: 2,
-        imm: [
-            false, false, false, false, false, false, false, false, false, false, true, false,
-        ],
+        imm: SmallImmediate::from(2),
     };
     // signed
     let inst = Instruction::SLTI { data };
@@ -684,7 +729,7 @@ fn test_loads() {
         data: I {
             rd: 1,
             rs1: 0,
-            imm: [false; 12],
+            imm: SmallImmediate::from(0),
         },
     });
     assert_eq!(state.get_register(1), 1);
@@ -693,9 +738,7 @@ fn test_loads() {
         data: I {
             rd: 1,
             rs1: 0,
-            imm: [
-                false, false, false, false, false, false, false, false, false, false, false, true,
-            ],
+            imm: SmallImmediate::from(1),
         },
     });
     assert_eq!(state.get_register(1), 2);
@@ -705,7 +748,7 @@ fn test_loads() {
         data: I {
             rd: 1,
             rs1: 0,
-            imm: [false; 12],
+            imm: SmallImmediate::from(0),
         },
     });
     assert_eq!(state.get_register(1), 258);
@@ -714,9 +757,7 @@ fn test_loads() {
         data: I {
             rd: 1,
             rs1: 0,
-            imm: [
-                false, false, false, false, false, false, false, false, false, false, false, true,
-            ],
+            imm: SmallImmediate::from(1),
         },
     });
     assert_eq!(state.get_register(1), 258 << 1);
@@ -726,7 +767,7 @@ fn test_loads() {
         data: I {
             rd: 1,
             rs1: 0,
-            imm: [false; 12],
+            imm: SmallImmediate::from(0),
         },
     });
     assert_eq!(state.get_register(1), 16909320);
@@ -735,9 +776,7 @@ fn test_loads() {
         data: I {
             rd: 1,
             rs1: 0,
-            imm: [
-                false, false, false, false, false, false, false, false, false, false, false, true,
-            ],
+            imm: SmallImmediate::from(1),
         },
     });
     assert_eq!(state.get_register(1), 16909320 << 1);
@@ -752,7 +791,7 @@ fn test_stores() {
 
     state.apply(&Instruction::SB {
         data: S {
-            imm: [false; 12],
+            imm: SmallImmediate::from(0),
             rs1: 0,
             rs2: 1,
         },
@@ -762,7 +801,7 @@ fn test_stores() {
 
     state.apply(&Instruction::SH {
         data: S {
-            imm: [false; 12],
+            imm: SmallImmediate::from(0),
             rs1: 0,
             rs2: 1,
         },
@@ -777,7 +816,7 @@ fn test_stores() {
 
     state.apply(&Instruction::SW {
         data: S {
-            imm: [false; 12],
+            imm: SmallImmediate::from(0),
             rs1: 0,
             rs2: 1,
         },
@@ -798,7 +837,7 @@ fn test_load_signs() {
     // byte loads
     state.mem[0] = 0b10000000;
     let test = I {
-        imm: [false; 12],
+        imm: SmallImmediate::from(0),
         rs1: 1,
         rd: 4,
     };
@@ -833,9 +872,7 @@ fn test_conditional_jumps() {
     let test = B {
         rs1: 1,
         rs2: 2,
-        imm: [
-            false, false, false, false, false, false, false, false, false, true, false, false,
-        ],
+        imm: SmallImmediate::from(4),
     };
 
     state.apply(&Instruction::BEQ { data: test });
@@ -889,10 +926,7 @@ fn test_unconditional_jumps() {
     state.apply(&Instruction::JAL {
         data: J {
             rd: 1,
-            imm: [
-                false, false, false, false, false, false, false, false, false, false, false, false,
-                false, false, false, false, true, false, false, false,
-            ],
+            imm: BigImmediate::from(8),
         },
     });
     assert_eq!(state.pc, 16);
@@ -902,9 +936,7 @@ fn test_unconditional_jumps() {
         data: I {
             rd: 1,
             rs1: 0,
-            imm: [
-                false, false, false, false, false, false, false, false, true, false, false, false,
-            ],
+            imm: SmallImmediate::from(8),
         },
     });
     assert_eq!(state.pc, 8);
@@ -917,10 +949,7 @@ fn test_lui_auipc() {
 
     let test = U {
         rd: 1,
-        imm: [
-            true, false, false, false, false, false, false, false, false, false, false, false,
-            false, false, false, false, false, false, false, false,
-        ],
+        imm: BigImmediate::from(1 << 19),
     };
 
     state.apply(&Instruction::LUI { data: test });
