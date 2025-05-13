@@ -502,6 +502,15 @@ impl ArchState {
                     & 0xFFFE)
                     - 4;
             }
+            Instruction::LUI { data } => {
+                self.set_register(data.rd.unsigned() as usize, data.imm.unsigned() << 12);
+            }
+            Instruction::AUIPC { data } => {
+                self.set_register(
+                    data.rd.unsigned() as usize,
+                    self.pc as u32 + (data.imm.unsigned() << 12),
+                );
+            }
             _ => {
                 panic!("Instruction Not Implemented!!")
             }
@@ -892,4 +901,23 @@ fn test_unconditional_jumps() {
     });
     assert_eq!(state.pc, 8);
     assert_eq!(state.get_register(1), 20);
+}
+
+#[test]
+fn test_lui_auipc() {
+    let mut state = ArchState::new();
+
+    let test = U {
+        rd: [false, false, false, false, true],
+        imm: [
+            true, false, false, false, false, false, false, false, false, false, false, false,
+            false, false, false, false, false, false, false, false,
+        ],
+    };
+
+    state.apply(&Instruction::LUI { data: test });
+    assert_eq!(state.get_register(1), 2_u32.pow(31));
+
+    state.apply(&Instruction::AUIPC { data: test });
+    assert_eq!(state.get_register(1), 2_u32.pow(31) + 4);
 }
