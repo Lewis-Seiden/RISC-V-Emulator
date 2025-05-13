@@ -162,7 +162,7 @@ pub enum Instruction {
 
 pub struct ArchState {
     regs: [u32; 31], // x0 is handled in the getter
-    pc: u32,
+    pc: i64,         // must be able to be negative so we can jump to 0
     mem: Vec<u8>,
 }
 
@@ -428,6 +428,66 @@ impl ArchState {
                     self.mem[index as usize + offset] =
                         (self.get_register(data.rs2.unsigned() as usize) >> 8 * (3 - offset)) as u8
                 });
+            }
+            Instruction::BEQ { data } => {
+                self.pc += if self.get_register(data.rs1.unsigned() as usize)
+                    == self.get_register(data.rs2.unsigned() as usize)
+                {
+                    // decrement because we will increment later
+                    data.imm.sign_extend() - 4
+                } else {
+                    0
+                } as i64
+            }
+            Instruction::BNE { data } => {
+                self.pc += if self.get_register(data.rs1.unsigned() as usize)
+                    != self.get_register(data.rs2.unsigned() as usize)
+                {
+                    // decrement because we will increment later
+                    data.imm.sign_extend() - 4
+                } else {
+                    0
+                } as i64
+            }
+            Instruction::BLT { data } => {
+                self.pc += if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    < transmute_to_signed(self.get_register(data.rs2.unsigned() as usize))
+                {
+                    // decrement because we will increment later
+                    data.imm.sign_extend() - 4
+                } else {
+                    0
+                } as i64
+            }
+            Instruction::BLTU { data } => {
+                self.pc += if self.get_register(data.rs1.unsigned() as usize)
+                    < self.get_register(data.rs2.unsigned() as usize)
+                {
+                    // decrement because we will increment later
+                    data.imm.sign_extend() - 4
+                } else {
+                    0
+                } as i64
+            }
+            Instruction::BGE { data } => {
+                self.pc += if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    >= transmute_to_signed(self.get_register(data.rs2.unsigned() as usize))
+                {
+                    // decrement because we will increment later
+                    data.imm.sign_extend() - 4
+                } else {
+                    0
+                } as i64
+            }
+            Instruction::BGEU { data } => {
+                self.pc += if self.get_register(data.rs1.unsigned() as usize)
+                    >= self.get_register(data.rs2.unsigned() as usize)
+                {
+                    // decrement because we will increment later
+                    data.imm.sign_extend() - 4
+                } else {
+                    0
+                } as i64
             }
             _ => {
                 panic!("Instruction Not Implemented!!")
@@ -703,7 +763,7 @@ fn test_stores() {
 }
 
 #[test]
-fn test_store_signs() {
+fn test_load_signs() {
     let mut state = ArchState::new();
     // byte loads
     state.mem[0] = 0b10000000;
@@ -733,4 +793,60 @@ fn test_store_signs() {
     state.apply(&Instruction::LH { data: test });
     println!("signed half: {:b}", state.get_register(4));
     assert_eq!(transmute_to_signed(state.get_register(4)), -(1_i32 << 15));
+}
+
+#[test]
+fn test_conditional_jumps() {
+    let mut state = ArchState::new();
+    state.set_register(1, 1);
+    state.set_register(2, 1);
+    let test = B {
+        rs1: [false, false, false, false, true],
+        rs2: [false, false, false, true, false],
+        imm: [
+            false, false, false, false, false, false, false, false, true, false, false, false,
+        ],
+    };
+
+    state.apply(&Instruction::BEQ { data: test });
+    assert_eq!(state.pc, 8);
+    state.set_register(2, 0);
+    state.apply(&Instruction::BEQ { data: test });
+    assert_eq!(state.pc, 12);
+
+    state.apply(&Instruction::BNE { data: test });
+    assert_eq!(state.pc, 20);
+    state.set_register(2, 1);
+    state.apply(&Instruction::BNE { data: test });
+    assert_eq!(state.pc, 24);
+
+    state.apply(&Instruction::BLT { data: test });
+    assert_eq!(state.pc, 28);
+    state.set_register(2, 2);
+    state.apply(&Instruction::BLT { data: test });
+    assert_eq!(state.pc, 36);
+
+    state.apply(&Instruction::BGE { data: test });
+    assert_eq!(state.pc, 40);
+    state.set_register(2, 1);
+    state.apply(&Instruction::BGE { data: test });
+    assert_eq!(state.pc, 48);
+    state.set_register(2, 0);
+    state.apply(&Instruction::BGE { data: test });
+    assert_eq!(state.pc, 56);
+
+    state.apply(&Instruction::BLTU { data: test });
+    assert_eq!(state.pc, 28 + 32);
+    state.set_register(2, 2);
+    state.apply(&Instruction::BLTU { data: test });
+    assert_eq!(state.pc, 36 + 32);
+
+    state.apply(&Instruction::BGEU { data: test });
+    assert_eq!(state.pc, 40 + 32);
+    state.set_register(2, 1);
+    state.apply(&Instruction::BGEU { data: test });
+    assert_eq!(state.pc, 48 + 32);
+    state.set_register(2, 0);
+    state.apply(&Instruction::BGEU { data: test });
+    assert_eq!(state.pc, 56 + 32);
 }
