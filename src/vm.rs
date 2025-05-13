@@ -489,6 +489,19 @@ impl ArchState {
                     0
                 } as i64
             }
+            Instruction::JAL { data } => {
+                self.set_register(data.rd.unsigned() as usize, self.pc as u32 + 4);
+                self.pc += data.imm.sign_extend() as i64 * 2 - 4;
+            }
+            Instruction::JALR { data } => {
+                self.set_register(data.rd.unsigned() as usize, self.pc as u32 + 4);
+                self.pc = (self
+                    .get_register(data.rs1.unsigned() as usize)
+                    .saturating_add_signed(data.imm.sign_extend())
+                    as i64
+                    & 0xFFFE)
+                    - 4;
+            }
             _ => {
                 panic!("Instruction Not Implemented!!")
             }
@@ -849,4 +862,34 @@ fn test_conditional_jumps() {
     state.set_register(2, 0);
     state.apply(&Instruction::BGEU { data: test });
     assert_eq!(state.pc, 56 + 32);
+}
+
+#[test]
+fn test_unconditional_jumps() {
+    let mut state = ArchState::new();
+    state.set_register(1, 1);
+
+    state.apply(&Instruction::JAL {
+        data: J {
+            rd: [false, false, false, false, true],
+            imm: [
+                false, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, true, false, false, false,
+            ],
+        },
+    });
+    assert_eq!(state.pc, 16);
+    assert_eq!(state.get_register(1), 4);
+
+    state.apply(&Instruction::JALR {
+        data: I {
+            rd: [false, false, false, false, true],
+            rs1: [false, false, false, false, false],
+            imm: [
+                false, false, false, false, false, false, false, false, true, false, false, false,
+            ],
+        },
+    });
+    assert_eq!(state.pc, 8);
+    assert_eq!(state.get_register(1), 20);
 }
