@@ -434,7 +434,7 @@ impl ArchState {
                     == self.get_register(data.rs2.unsigned() as usize)
                 {
                     // decrement because we will increment later
-                    data.imm.sign_extend() - 4
+                    data.imm.sign_extend() * 2 - 4
                 } else {
                     0
                 } as i64
@@ -444,7 +444,7 @@ impl ArchState {
                     != self.get_register(data.rs2.unsigned() as usize)
                 {
                     // decrement because we will increment later
-                    data.imm.sign_extend() - 4
+                    data.imm.sign_extend() * 2 - 4
                 } else {
                     0
                 } as i64
@@ -454,7 +454,7 @@ impl ArchState {
                     < transmute_to_signed(self.get_register(data.rs2.unsigned() as usize))
                 {
                     // decrement because we will increment later
-                    data.imm.sign_extend() - 4
+                    data.imm.sign_extend() * 2 - 4
                 } else {
                     0
                 } as i64
@@ -464,7 +464,7 @@ impl ArchState {
                     < self.get_register(data.rs2.unsigned() as usize)
                 {
                     // decrement because we will increment later
-                    data.imm.sign_extend() - 4
+                    data.imm.sign_extend() * 2 - 4
                 } else {
                     0
                 } as i64
@@ -474,7 +474,7 @@ impl ArchState {
                     >= transmute_to_signed(self.get_register(data.rs2.unsigned() as usize))
                 {
                     // decrement because we will increment later
-                    data.imm.sign_extend() - 4
+                    data.imm.sign_extend() * 2 - 4
                 } else {
                     0
                 } as i64
@@ -484,7 +484,7 @@ impl ArchState {
                     >= self.get_register(data.rs2.unsigned() as usize)
                 {
                     // decrement because we will increment later
-                    data.imm.sign_extend() - 4
+                    data.imm.sign_extend() * 2 - 4
                 } else {
                     0
                 } as i64
@@ -804,7 +804,7 @@ fn test_conditional_jumps() {
         rs1: [false, false, false, false, true],
         rs2: [false, false, false, true, false],
         imm: [
-            false, false, false, false, false, false, false, false, true, false, false, false,
+            false, false, false, false, false, false, false, false, false, true, false, false,
         ],
     };
 
