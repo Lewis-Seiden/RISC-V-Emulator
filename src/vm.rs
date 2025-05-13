@@ -69,44 +69,44 @@ fn test_unsigned() {
     );
 }
 
-type FiveBits = [bool; 5];
+type RegisterPointer = u8;
 type TwelveBits = [bool; 12];
 type TwentyBits = [bool; 20];
 
 // Instruction Formats
 #[derive(Clone, Copy, Debug)]
 pub struct R {
-    rd: FiveBits,
-    rs1: FiveBits,
-    rs2: FiveBits,
+    rd: RegisterPointer,
+    rs1: RegisterPointer,
+    rs2: RegisterPointer,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct I {
-    rd: FiveBits,
-    rs1: FiveBits,
+    rd: RegisterPointer,
+    rs1: RegisterPointer,
     imm: TwelveBits,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct S {
     imm: TwelveBits,
-    rs1: FiveBits,
-    rs2: FiveBits,
+    rs1: RegisterPointer,
+    rs2: RegisterPointer,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct U {
-    rd: FiveBits,
+    rd: RegisterPointer,
     imm: TwentyBits,
 }
 #[derive(Clone, Copy, Debug)]
 // Immediate mode variants
 pub struct B {
     imm: TwelveBits,
-    rs1: FiveBits,
-    rs2: FiveBits,
+    rs1: RegisterPointer,
+    rs2: RegisterPointer,
 } // Variant of S
 #[derive(Clone, Copy, Debug)]
 pub struct J {
-    rd: FiveBits,
+    rd: RegisterPointer,
     imm: TwentyBits,
 } // Variant of U
 
@@ -174,12 +174,26 @@ fn transmute_to_unsigned(signed: i32) -> u32 {
     unsafe { std::mem::transmute(signed) }
 }
 
+fn interpret_bytes(bytes: u32) -> Instruction {
+    Instruction::ADDI {
+        data: I {
+            rd: 0,
+            rs1: 0,
+            imm: [false; 12],
+        },
+    }
+}
+
 impl ArchState {
     pub fn new() -> Self {
+        Self::with_mem(2_usize.pow(16))
+    }
+
+    pub fn with_mem(cap: usize) -> Self {
         Self {
             regs: [0; 31],
             pc: 0,
-            mem: vec![0; 2_usize.pow(16)],
+            mem: vec![0; cap],
         }
     }
 
@@ -194,57 +208,54 @@ impl ArchState {
         self.regs[reg - 1] = val;
     }
 
+    pub fn load(&mut self, program: Vec<u8>, offset: usize) {
+        (offset..offset + program.len()).for_each(|i| self.mem[i] = program[i - offset]);
+    }
+
     pub fn apply(&mut self, inst: &Instruction) {
         match inst {
             // Register Arithmetic
             Instruction::ADD { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize)
-                    + self.get_register(data.rs2.unsigned() as usize),
+                data.rd as usize,
+                self.get_register(data.rs1 as usize) + self.get_register(data.rs2 as usize),
             ),
             Instruction::SUB { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize)
-                    - self.get_register(data.rs2.unsigned() as usize),
+                data.rd as usize,
+                self.get_register(data.rs1 as usize) - self.get_register(data.rs2 as usize),
             ),
             Instruction::XOR { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize)
-                    ^ self.get_register(data.rs2.unsigned() as usize),
+                data.rd as usize,
+                self.get_register(data.rs1 as usize) ^ self.get_register(data.rs2 as usize),
             ),
             Instruction::OR { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize)
-                    | self.get_register(data.rs2.unsigned() as usize),
+                data.rd as usize,
+                self.get_register(data.rs1 as usize) | self.get_register(data.rs2 as usize),
             ),
             Instruction::AND { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize)
-                    & self.get_register(data.rs2.unsigned() as usize),
+                data.rd as usize,
+                self.get_register(data.rs1 as usize) & self.get_register(data.rs2 as usize),
             ),
             // Shifts
             Instruction::SLL { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize)
-                    << self.get_register(data.rs2.unsigned() as usize),
+                data.rd as usize,
+                self.get_register(data.rs1 as usize) << self.get_register(data.rs2 as usize),
             ),
             Instruction::SRL { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize)
-                    >> self.get_register(data.rs2.unsigned() as usize),
+                data.rd as usize,
+                self.get_register(data.rs1 as usize) >> self.get_register(data.rs2 as usize),
             ),
             Instruction::SRA { data } => self.set_register(
-                data.rd.unsigned() as usize,
+                data.rd as usize,
                 transmute_to_unsigned(
-                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
-                        >> self.get_register(data.rs2.unsigned() as usize),
+                    transmute_to_signed(self.get_register(data.rs1 as usize))
+                        >> self.get_register(data.rs2 as usize),
                 ),
             ),
             // Register Comparisons
             Instruction::SLT { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
-                    < transmute_to_signed(self.get_register(data.rs2.unsigned() as usize))
+                data.rd as usize,
+                if transmute_to_signed(self.get_register(data.rs1 as usize))
+                    < transmute_to_signed(self.get_register(data.rs2 as usize))
                 {
                     1
                 } else {
@@ -252,10 +263,8 @@ impl ArchState {
                 },
             ),
             Instruction::SLTU { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                if self.get_register(data.rs1.unsigned() as usize)
-                    < self.get_register(data.rs2.unsigned() as usize)
-                {
+                data.rd as usize,
+                if self.get_register(data.rs1 as usize) < self.get_register(data.rs2 as usize) {
                     1
                 } else {
                     0
@@ -263,56 +272,56 @@ impl ArchState {
             ),
             // Immediate Arithmetic
             Instruction::ADDI { data } => self.set_register(
-                data.rd.unsigned() as usize,
+                data.rd as usize,
                 transmute_to_unsigned(
-                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    transmute_to_signed(self.get_register(data.rs1 as usize))
                         + data.imm.sign_extend(),
                 ),
             ),
             Instruction::XORI { data } => self.set_register(
-                data.rd.unsigned() as usize,
+                data.rd as usize,
                 transmute_to_unsigned(
-                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    transmute_to_signed(self.get_register(data.rs1 as usize))
                         ^ data.imm.sign_extend(),
                 ),
             ),
             Instruction::ORI { data } => self.set_register(
-                data.rd.unsigned() as usize,
+                data.rd as usize,
                 transmute_to_unsigned(
-                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    transmute_to_signed(self.get_register(data.rs1 as usize))
                         | data.imm.sign_extend(),
                 ),
             ),
             Instruction::ANDI { data } => self.set_register(
-                data.rd.unsigned() as usize,
+                data.rd as usize,
                 transmute_to_unsigned(
-                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    transmute_to_signed(self.get_register(data.rs1 as usize))
                         & data.imm.sign_extend(),
                 ),
             ),
             // Immediate Shifts
             Instruction::SLLI { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize) << data.imm.unsigned(),
+                data.rd as usize,
+                self.get_register(data.rs1 as usize) << data.imm.unsigned(),
             ),
             Instruction::SRLI { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                self.get_register(data.rs1.unsigned() as usize)
+                data.rd as usize,
+                self.get_register(data.rs1 as usize)
                 // Skip first few bits because arithmetic vs logical shift is encoded in them
                     >> data.imm.last_chunk::<5>().unwrap().unsigned(),
             ),
             Instruction::SRAI { data } => self.set_register(
-                data.rd.unsigned() as usize,
+                data.rd as usize,
                 transmute_to_unsigned(
-                    transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                    transmute_to_signed(self.get_register(data.rs1 as usize))
                     // Skip first few bits because arithmetic vs logical shift is encoded in them
                         >> data.imm.last_chunk::<5>().unwrap().unsigned(),
                 ),
             ),
             // Immediate Comparisons
             Instruction::SLTI { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
+                data.rd as usize,
+                if transmute_to_signed(self.get_register(data.rs1 as usize))
                     < data.imm.sign_extend()
                 {
                     1
@@ -321,8 +330,8 @@ impl ArchState {
                 },
             ),
             Instruction::SLTUI { data } => self.set_register(
-                data.rd.unsigned() as usize,
-                if self.get_register(data.rs1.unsigned() as usize)
+                data.rd as usize,
+                if self.get_register(data.rs1 as usize)
                     < transmute_to_unsigned(data.imm.sign_extend())
                 {
                     1
@@ -332,20 +341,20 @@ impl ArchState {
             ),
             // Loads
             Instruction::LBU { data } => self.set_register(
-                data.rd.unsigned() as usize,
+                data.rd as usize,
                 *self
                     .mem
                     .get(
-                        (self.get_register(data.rs1.unsigned() as usize) as usize)
+                        (self.get_register(data.rs1 as usize) as usize)
                             .wrapping_add_signed(data.imm.sign_extend() as isize),
                     )
                     .unwrap() as u32,
             ),
             Instruction::LHU { data } => {
-                let index = (self.get_register(data.rs1.unsigned() as usize) as usize)
+                let index = (self.get_register(data.rs1 as usize) as usize)
                     .wrapping_add_signed(data.imm.sign_extend() as isize);
                 self.set_register(
-                    data.rd.unsigned() as usize,
+                    data.rd as usize,
                     (0..2)
                         .map(|offset| {
                             (*self.mem.get(index + offset).unwrap() as u32) << 8 * (1 - offset)
@@ -357,12 +366,12 @@ impl ArchState {
                 let val = *self
                     .mem
                     .get(
-                        (self.get_register(data.rs1.unsigned() as usize) as usize)
+                        (self.get_register(data.rs1 as usize) as usize)
                             .wrapping_add_signed(data.imm.sign_extend() as isize),
                     )
                     .unwrap() as u32;
                 self.set_register(
-                    data.rd.unsigned() as usize,
+                    data.rd as usize,
                     // sign extension magic
                     // check if most significant defined bit is 1
                     // if so, set remaining significant bits to 1 with magic number
@@ -374,7 +383,7 @@ impl ArchState {
                 );
             }
             Instruction::LH { data } => {
-                let index = (self.get_register(data.rs1.unsigned() as usize) as usize)
+                let index = (self.get_register(data.rs1 as usize) as usize)
                     .wrapping_add_signed(data.imm.sign_extend() as isize);
                 let val = (0..2)
                     .map(|offset| {
@@ -382,7 +391,7 @@ impl ArchState {
                     })
                     .sum::<u32>();
                 self.set_register(
-                    data.rd.unsigned() as usize,
+                    data.rd as usize,
                     // sign extension magic
                     // check if most significant defined bit is 1
                     // if so, set remaining significant bits to 1 with magic number
@@ -394,10 +403,10 @@ impl ArchState {
                 )
             }
             Instruction::LW { data } => {
-                let index = (self.get_register(data.rs1.unsigned() as usize) as usize)
+                let index = (self.get_register(data.rs1 as usize) as usize)
                     .wrapping_add_signed(data.imm.sign_extend() as isize);
                 self.set_register(
-                    data.rd.unsigned() as usize,
+                    data.rd as usize,
                     (0..4)
                         .map(|offset| {
                             (*self.mem.get(index + offset).unwrap() as u32) << 8 * (3 - offset)
@@ -407,31 +416,31 @@ impl ArchState {
             }
             Instruction::SB { data } => {
                 let index = self
-                    .get_register(data.rs1.unsigned() as usize)
+                    .get_register(data.rs1 as usize)
                     .wrapping_add_signed(data.imm.sign_extend() as i32);
-                self.mem[index as usize] = self.get_register(data.rs2.unsigned() as usize) as u8;
+                self.mem[index as usize] = self.get_register(data.rs2 as usize) as u8;
             }
             Instruction::SH { data } => {
                 let index = self
-                    .get_register(data.rs1.unsigned() as usize)
+                    .get_register(data.rs1 as usize)
                     .wrapping_add_signed(data.imm.sign_extend() as i32);
                 (0..2).for_each(|offset| {
                     self.mem[index as usize + offset] =
-                        (self.get_register(data.rs2.unsigned() as usize) >> 8 * (1 - offset)) as u8
+                        (self.get_register(data.rs2 as usize) >> 8 * (1 - offset)) as u8
                 });
             }
             Instruction::SW { data } => {
                 let index = self
-                    .get_register(data.rs1.unsigned() as usize)
+                    .get_register(data.rs1 as usize)
                     .wrapping_add_signed(data.imm.sign_extend() as i32);
                 (0..4).for_each(|offset| {
                     self.mem[index as usize + offset] =
-                        (self.get_register(data.rs2.unsigned() as usize) >> 8 * (3 - offset)) as u8
+                        (self.get_register(data.rs2 as usize) >> 8 * (3 - offset)) as u8
                 });
             }
             Instruction::BEQ { data } => {
-                self.pc += if self.get_register(data.rs1.unsigned() as usize)
-                    == self.get_register(data.rs2.unsigned() as usize)
+                self.pc += if self.get_register(data.rs1 as usize)
+                    == self.get_register(data.rs2 as usize)
                 {
                     // decrement because we will increment later
                     data.imm.sign_extend() * 2 - 4
@@ -440,8 +449,8 @@ impl ArchState {
                 } as i64
             }
             Instruction::BNE { data } => {
-                self.pc += if self.get_register(data.rs1.unsigned() as usize)
-                    != self.get_register(data.rs2.unsigned() as usize)
+                self.pc += if self.get_register(data.rs1 as usize)
+                    != self.get_register(data.rs2 as usize)
                 {
                     // decrement because we will increment later
                     data.imm.sign_extend() * 2 - 4
@@ -450,8 +459,8 @@ impl ArchState {
                 } as i64
             }
             Instruction::BLT { data } => {
-                self.pc += if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
-                    < transmute_to_signed(self.get_register(data.rs2.unsigned() as usize))
+                self.pc += if transmute_to_signed(self.get_register(data.rs1 as usize))
+                    < transmute_to_signed(self.get_register(data.rs2 as usize))
                 {
                     // decrement because we will increment later
                     data.imm.sign_extend() * 2 - 4
@@ -460,18 +469,17 @@ impl ArchState {
                 } as i64
             }
             Instruction::BLTU { data } => {
-                self.pc += if self.get_register(data.rs1.unsigned() as usize)
-                    < self.get_register(data.rs2.unsigned() as usize)
-                {
-                    // decrement because we will increment later
-                    data.imm.sign_extend() * 2 - 4
-                } else {
-                    0
-                } as i64
+                self.pc +=
+                    if self.get_register(data.rs1 as usize) < self.get_register(data.rs2 as usize) {
+                        // decrement because we will increment later
+                        data.imm.sign_extend() * 2 - 4
+                    } else {
+                        0
+                    } as i64
             }
             Instruction::BGE { data } => {
-                self.pc += if transmute_to_signed(self.get_register(data.rs1.unsigned() as usize))
-                    >= transmute_to_signed(self.get_register(data.rs2.unsigned() as usize))
+                self.pc += if transmute_to_signed(self.get_register(data.rs1 as usize))
+                    >= transmute_to_signed(self.get_register(data.rs2 as usize))
                 {
                     // decrement because we will increment later
                     data.imm.sign_extend() * 2 - 4
@@ -480,8 +488,8 @@ impl ArchState {
                 } as i64
             }
             Instruction::BGEU { data } => {
-                self.pc += if self.get_register(data.rs1.unsigned() as usize)
-                    >= self.get_register(data.rs2.unsigned() as usize)
+                self.pc += if self.get_register(data.rs1 as usize)
+                    >= self.get_register(data.rs2 as usize)
                 {
                     // decrement because we will increment later
                     data.imm.sign_extend() * 2 - 4
@@ -490,24 +498,24 @@ impl ArchState {
                 } as i64
             }
             Instruction::JAL { data } => {
-                self.set_register(data.rd.unsigned() as usize, self.pc as u32 + 4);
+                self.set_register(data.rd as usize, self.pc as u32 + 4);
                 self.pc += data.imm.sign_extend() as i64 * 2 - 4;
             }
             Instruction::JALR { data } => {
-                self.set_register(data.rd.unsigned() as usize, self.pc as u32 + 4);
+                self.set_register(data.rd as usize, self.pc as u32 + 4);
                 self.pc = (self
-                    .get_register(data.rs1.unsigned() as usize)
+                    .get_register(data.rs1 as usize)
                     .saturating_add_signed(data.imm.sign_extend())
                     as i64
                     & 0xFFFE)
                     - 4;
             }
             Instruction::LUI { data } => {
-                self.set_register(data.rd.unsigned() as usize, data.imm.unsigned() << 12);
+                self.set_register(data.rd as usize, data.imm.unsigned() << 12);
             }
             Instruction::AUIPC { data } => {
                 self.set_register(
-                    data.rd.unsigned() as usize,
+                    data.rd as usize,
                     self.pc as u32 + (data.imm.unsigned() << 12),
                 );
             }
@@ -522,9 +530,9 @@ impl ArchState {
 #[test]
 fn test_arithmetic() {
     let data = R {
-        rd: [false, false, false, false, true],
-        rs1: [false, false, false, true, false],
-        rs2: [false, false, false, true, true],
+        rd: 1,
+        rs1: 2,
+        rs2: 3,
     };
     for (inst, expected) in vec![
         (Instruction::ADD { data: data.clone() }, 2),
@@ -551,9 +559,9 @@ fn test_shift_right_logical() {
     state.set_register(2, 2_u32.pow(31));
     state.set_register(3, 1);
     let data = R {
-        rd: [false, false, false, false, true],
-        rs1: [false, false, false, true, false],
-        rs2: [false, false, false, true, true],
+        rd: 1,
+        rs1: 2,
+        rs2: 3,
     };
     let inst = Instruction::SRL { data };
     state.apply(&inst);
@@ -576,9 +584,9 @@ fn test_shift_right_arithmetic() {
     state.set_register(2, 2_u32.pow(31));
     state.set_register(3, 1);
     let data = R {
-        rd: [false, false, false, false, true],
-        rs1: [false, false, false, true, false],
-        rs2: [false, false, false, true, true],
+        rd: 1,
+        rs1: 2,
+        rs2: 3,
     };
     let inst = Instruction::SRA { data };
     state.apply(&inst);
@@ -601,9 +609,9 @@ fn test_comparison() {
     state.set_register(2, 1);
     state.set_register(3, 2);
     let data = R {
-        rd: [false, false, false, false, true],
-        rs1: [false, false, false, true, false],
-        rs2: [false, false, false, true, true],
+        rd: 1,
+        rs1: 2,
+        rs2: 3,
     };
     // signed
     let inst = Instruction::SLT { data };
@@ -618,8 +626,8 @@ fn test_comparison() {
 #[test]
 fn test_immediate_arithmetic() {
     let data = I {
-        rd: [false, false, false, false, true],
-        rs1: [false, false, false, true, false],
+        rd: 1,
+        rs1: 2,
         imm: [
             false, false, false, false, false, false, false, false, false, false, false, true,
         ],
@@ -646,8 +654,8 @@ fn test_comparison_immediate() {
     let mut state = ArchState::new();
     state.set_register(2, 1);
     let data = I {
-        rd: [false, false, false, false, true],
-        rs1: [false, false, false, true, false],
+        rd: 1,
+        rs1: 2,
         imm: [
             false, false, false, false, false, false, false, false, false, false, true, false,
         ],
@@ -674,8 +682,8 @@ fn test_loads() {
     // byte
     state.apply(&Instruction::LB {
         data: I {
-            rd: [false, false, false, false, true],
-            rs1: [false; 5],
+            rd: 1,
+            rs1: 0,
             imm: [false; 12],
         },
     });
@@ -683,8 +691,8 @@ fn test_loads() {
     // test offset
     state.apply(&Instruction::LB {
         data: I {
-            rd: [false, false, false, false, true],
-            rs1: [false; 5],
+            rd: 1,
+            rs1: 0,
             imm: [
                 false, false, false, false, false, false, false, false, false, false, false, true,
             ],
@@ -695,8 +703,8 @@ fn test_loads() {
     // half
     state.apply(&Instruction::LH {
         data: I {
-            rd: [false, false, false, false, true],
-            rs1: [false; 5],
+            rd: 1,
+            rs1: 0,
             imm: [false; 12],
         },
     });
@@ -704,8 +712,8 @@ fn test_loads() {
     // test offset
     state.apply(&Instruction::LH {
         data: I {
-            rd: [false, false, false, false, true],
-            rs1: [false; 5],
+            rd: 1,
+            rs1: 0,
             imm: [
                 false, false, false, false, false, false, false, false, false, false, false, true,
             ],
@@ -716,8 +724,8 @@ fn test_loads() {
     // word
     state.apply(&Instruction::LW {
         data: I {
-            rd: [false, false, false, false, true],
-            rs1: [false; 5],
+            rd: 1,
+            rs1: 0,
             imm: [false; 12],
         },
     });
@@ -725,8 +733,8 @@ fn test_loads() {
     // test offset
     state.apply(&Instruction::LW {
         data: I {
-            rd: [false, false, false, false, true],
-            rs1: [false; 5],
+            rd: 1,
+            rs1: 0,
             imm: [
                 false, false, false, false, false, false, false, false, false, false, false, true,
             ],
@@ -745,8 +753,8 @@ fn test_stores() {
     state.apply(&Instruction::SB {
         data: S {
             imm: [false; 12],
-            rs1: [false; 5],
-            rs2: [false, false, false, false, true],
+            rs1: 0,
+            rs2: 1,
         },
     });
     assert_eq!(state.mem[0], 1);
@@ -755,8 +763,8 @@ fn test_stores() {
     state.apply(&Instruction::SH {
         data: S {
             imm: [false; 12],
-            rs1: [false; 5],
-            rs2: [false, false, false, false, true],
+            rs1: 0,
+            rs2: 1,
         },
     });
     println!("{} {}", (state.mem[0] as u32), state.mem[1]);
@@ -770,8 +778,8 @@ fn test_stores() {
     state.apply(&Instruction::SW {
         data: S {
             imm: [false; 12],
-            rs1: [false; 5],
-            rs2: [false, false, false, false, true],
+            rs1: 0,
+            rs2: 1,
         },
     });
     println!("{} {}", (state.mem[0] as u32), state.mem[1]);
@@ -791,8 +799,8 @@ fn test_load_signs() {
     state.mem[0] = 0b10000000;
     let test = I {
         imm: [false; 12],
-        rs1: [false, false, false, false, true],
-        rd: [false, false, true, false, false],
+        rs1: 1,
+        rd: 4,
     };
     // unsigned load will 0 pad
     state.apply(&Instruction::LBU { data: test });
@@ -823,8 +831,8 @@ fn test_conditional_jumps() {
     state.set_register(1, 1);
     state.set_register(2, 1);
     let test = B {
-        rs1: [false, false, false, false, true],
-        rs2: [false, false, false, true, false],
+        rs1: 1,
+        rs2: 2,
         imm: [
             false, false, false, false, false, false, false, false, false, true, false, false,
         ],
@@ -880,7 +888,7 @@ fn test_unconditional_jumps() {
 
     state.apply(&Instruction::JAL {
         data: J {
-            rd: [false, false, false, false, true],
+            rd: 1,
             imm: [
                 false, false, false, false, false, false, false, false, false, false, false, false,
                 false, false, false, false, true, false, false, false,
@@ -892,8 +900,8 @@ fn test_unconditional_jumps() {
 
     state.apply(&Instruction::JALR {
         data: I {
-            rd: [false, false, false, false, true],
-            rs1: [false, false, false, false, false],
+            rd: 1,
+            rs1: 0,
             imm: [
                 false, false, false, false, false, false, false, false, true, false, false, false,
             ],
@@ -908,7 +916,7 @@ fn test_lui_auipc() {
     let mut state = ArchState::new();
 
     let test = U {
-        rd: [false, false, false, false, true],
+        rd: 1,
         imm: [
             true, false, false, false, false, false, false, false, false, false, false, false,
             false, false, false, false, false, false, false, false,
