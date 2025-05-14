@@ -225,12 +225,161 @@ fn transmute_to_unsigned(signed: i32) -> u32 {
 }
 
 fn interpret_bytes(bytes: u32) -> Instruction {
-    Instruction::ADDI {
+    let opcode = bytes & 0b1111111;
+    let func3 = (bytes & (0b111 << 11)) >> 11;
+    let nop = Instruction::ADDI {
         data: I {
             rd: 0,
             rs1: 0,
             imm: SmallImmediate::from(0),
         },
+    };
+    match opcode {
+        0110011 => {
+            // integer register to register
+            let data = R {
+                rd: (bytes >> 6) as u8,
+                rs1: (bytes >> 14) as u8,
+                rs2: (bytes >> 19) as u8,
+            };
+            // check func3 and 30 bit for function
+            match func3 + (bytes >> 27) {
+                0000 => Instruction::ADD { data },
+                1000 => Instruction::SUB { data },
+                0001 | 1001 => Instruction::SLL { data },
+                0010 | 1010 => Instruction::SLT { data },
+                0011 | 1011 => Instruction::SLTU { data },
+                0100 | 1100 => Instruction::XOR { data },
+                0101 => Instruction::SRL { data },
+                1101 => Instruction::SRA { data },
+                0110 | 1110 => Instruction::OR { data },
+                0111 | 1111 => Instruction::AND { data },
+                _ => nop,
+            }
+        }
+        0010011 => {
+            // integer register immediate
+            let data = I {
+                rd: (bytes >> 6) as u8,
+                rs1: (bytes >> 14) as u8,
+                imm: SmallImmediate::from(bytes >> 19),
+            };
+            match func3 {
+                000 => Instruction::ADDI { data },
+                010 => Instruction::SLTI { data },
+                011 => Instruction::SLTUI { data },
+                100 => Instruction::XORI { data },
+                110 => Instruction::ORI { data },
+                111 => Instruction::ANDI { data },
+                001 => Instruction::SLLI { data },
+                // Check f7
+                101 => {
+                    if bytes & 2_u32.pow(30) == 0 {
+                        Instruction::SRLI { data }
+                    } else {
+                        Instruction::SRAI { data }
+                    }
+                }
+                _ => nop,
+            }
+        }
+        0100011 => {
+            // store instructions
+            let data = S {
+                rs1: (bytes >> 14) as u8,
+                rs2: (bytes >> 19) as u8,
+                imm: SmallImmediate::from((bytes >> 6) & 0b11111 + (bytes >> 24)),
+            };
+            match func3 {
+                000 => Instruction::SB { data },
+                001 => Instruction::SH { data },
+                010 => Instruction::SW { data },
+                _ => nop,
+            }
+        }
+        0000011 => {
+            // load instructions
+            let data = I {
+                rd: (bytes >> 6) as u8,
+                rs1: (bytes >> 14) as u8,
+                imm: SmallImmediate::from(bytes >> 19),
+            };
+            match func3 {
+                000 => Instruction::LB { data },
+                001 => Instruction::LH { data },
+                010 => Instruction::LW { data },
+                100 => Instruction::LBU { data },
+                101 => Instruction::LHU { data },
+                _ => nop,
+            }
+        }
+        1100111 => {
+            // JALR
+            Instruction::JALR {
+                data: I {
+                    rd: (bytes >> 6) as u8,
+                    rs1: (bytes >> 14) as u8,
+                    imm: SmallImmediate::from(bytes >> 19),
+                },
+            }
+        }
+        1100011 => {
+            // Branch
+            let data = B {
+                rs1: (bytes >> 14) as u8,
+                rs2: (bytes >> 19) as u8,
+                imm: SmallImmediate::from(
+                    (((bytes >> 6) & 0b11111 +
+                    (bytes >> 24)) & 0b111111111100) +
+                    // lower order bits are moved to higher order for branches
+                    ((bytes & 128) << (11 - 7)) +
+                    ((bytes & 2_u32.pow(31) >> (31 - 12))),
+                ),
+            };
+            match func3 {
+                000 => Instruction::BEQ { data },
+                001 => Instruction::BNE { data },
+                100 => Instruction::BLT { data },
+                101 => Instruction::BGE { data },
+                110 => Instruction::BLTU { data },
+                111 => Instruction::BGEU { data },
+                _ => nop,
+            }
+        }
+        1101111 => {
+            // JAL
+            Instruction::JAL {
+                data: J {
+                    rd: (bytes >> 6) as u8,
+                    imm: BigImmediate::from(
+                        ((bytes >> 20) & 0b1111111111)
+                            + (((bytes >> 19) & 1) << 10)
+                            + (((bytes >> 11) & 0b11111111) << 11)
+                            + (((bytes >> 30) & 1) << 19),
+                    ),
+                },
+            }
+        }
+        0110111 => {
+            // LUI
+            Instruction::LUI {
+                data: U {
+                    rd: (bytes >> 6) as u8,
+                    imm: BigImmediate::from(bytes >> 11),
+                },
+            }
+        }
+        0010111 => {
+            // AUIPC
+            Instruction::AUIPC {
+                data: U {
+                    rd: (bytes >> 6) as u8,
+                    imm: BigImmediate::from(bytes >> 11),
+                },
+            }
+        }
+        // unknown instruction so no-op
+        _ => nop,
     }
 }
 
