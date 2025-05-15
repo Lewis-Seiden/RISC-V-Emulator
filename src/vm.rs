@@ -212,8 +212,8 @@ pub enum Instruction {
 
 pub struct ArchState {
     regs: [u32; 31], // x0 is handled in the getter
-    pc: i64,         // must be able to be negative so we can jump to 0
-    mem: Vec<u8>,
+    pub pc: i64,     // must be able to be negative so we can jump to 0
+    pub mem: Vec<u8>,
 }
 
 fn transmute_to_signed(unsigned: u32) -> i32 {
@@ -224,7 +224,7 @@ fn transmute_to_unsigned(signed: i32) -> u32 {
     unsafe { std::mem::transmute(signed) }
 }
 
-fn interpret_bytes(bytes: u32) -> Instruction {
+pub fn interpret_bytes(bytes: u32) -> Instruction {
     let opcode = bytes & 0b1111111;
     let func3 = (bytes & (0b111 << 11)) >> 11;
     let nop = Instruction::ADDI {
@@ -235,12 +235,12 @@ fn interpret_bytes(bytes: u32) -> Instruction {
         },
     };
     match opcode {
-        0110011 => {
+        0b0110011 => {
             // integer register to register
             let data = R {
-                rd: (bytes >> 6) as u8,
-                rs1: (bytes >> 14) as u8,
-                rs2: (bytes >> 19) as u8,
+                rd: (bytes >> 7) as u8 & 0b11111,
+                rs1: (bytes >> 15) as u8 & 0b11111,
+                rs2: (bytes >> 20) as u8 & 0b11111,
             };
             // check func3 and 30 bit for function
             match func3 + (bytes >> 27) {
@@ -257,12 +257,12 @@ fn interpret_bytes(bytes: u32) -> Instruction {
                 _ => nop,
             }
         }
-        0010011 => {
+        0b0010011 => {
             // integer register immediate
             let data = I {
-                rd: (bytes >> 6) as u8,
-                rs1: (bytes >> 14) as u8,
-                imm: SmallImmediate::from(bytes >> 19),
+                rd: (bytes >> 7) as u8 & 0b11111,
+                rs1: (bytes >> 15) as u8 & 0b11111,
+                imm: SmallImmediate::from(bytes >> 20),
             };
             match func3 {
                 000 => Instruction::ADDI { data },
@@ -283,12 +283,12 @@ fn interpret_bytes(bytes: u32) -> Instruction {
                 _ => nop,
             }
         }
-        0100011 => {
+        0b0100011 => {
             // store instructions
             let data = S {
-                rs1: (bytes >> 14) as u8,
-                rs2: (bytes >> 19) as u8,
-                imm: SmallImmediate::from((bytes >> 6) & 0b11111 + (bytes >> 24)),
+                rs1: (bytes >> 15) as u8 & 0b11111,
+                rs2: (bytes >> 20) as u8 & 0b11111,
+                imm: SmallImmediate::from((bytes >> 7) & 0b11111 + (bytes >> 24)),
             };
             match func3 {
                 000 => Instruction::SB { data },
@@ -297,12 +297,12 @@ fn interpret_bytes(bytes: u32) -> Instruction {
                 _ => nop,
             }
         }
-        0000011 => {
+        0b0000011 => {
             // load instructions
             let data = I {
-                rd: (bytes >> 6) as u8,
-                rs1: (bytes >> 14) as u8,
-                imm: SmallImmediate::from(bytes >> 19),
+                rd: (bytes >> 7) as u8 & 0b11111,
+                rs1: (bytes >> 15) as u8 & 0b11111,
+                imm: SmallImmediate::from(bytes >> 20),
             };
             match func3 {
                 000 => Instruction::LB { data },
@@ -313,23 +313,23 @@ fn interpret_bytes(bytes: u32) -> Instruction {
                 _ => nop,
             }
         }
-        1100111 => {
+        0b1100111 => {
             // JALR
             Instruction::JALR {
                 data: I {
-                    rd: (bytes >> 6) as u8,
-                    rs1: (bytes >> 14) as u8,
-                    imm: SmallImmediate::from(bytes >> 19),
+                    rd: (bytes >> 7) as u8,
+                    rs1: (bytes >> 15) as u8,
+                    imm: SmallImmediate::from(bytes >> 20),
                 },
             }
         }
-        1100011 => {
+        0b1100011 => {
             // Branch
             let data = B {
-                rs1: (bytes >> 14) as u8,
-                rs2: (bytes >> 19) as u8,
+                rs1: (bytes >> 15) as u8 & 0b11111,
+                rs2: (bytes >> 20) as u8 & 0b11111,
                 imm: SmallImmediate::from(
-                    (((bytes >> 6) & 0b11111 +
+                    (((bytes >> 7) & 0b11111 +
                     (bytes >> 24)) & 0b111111111100) +
                     // lower order bits are moved to higher order for branches
                     ((bytes & 128) << (11 - 7)) +
@@ -346,35 +346,35 @@ fn interpret_bytes(bytes: u32) -> Instruction {
                 _ => nop,
             }
         }
-        1101111 => {
+        0b1101111 => {
             // JAL
             Instruction::JAL {
                 data: J {
-                    rd: (bytes >> 6) as u8,
+                    rd: (bytes >> 7) as u8 & 0b11111,
                     imm: BigImmediate::from(
                         ((bytes >> 20) & 0b1111111111)
-                            + (((bytes >> 19) & 1) << 10)
-                            + (((bytes >> 11) & 0b11111111) << 11)
+                            + (((bytes >> 20) & 1) << 10)
+                            + (((bytes >> 12) & 0b11111111) << 11)
                             + (((bytes >> 30) & 1) << 19),
                     ),
                 },
             }
         }
-        0110111 => {
+        0b0110111 => {
             // LUI
             Instruction::LUI {
                 data: U {
-                    rd: (bytes >> 6) as u8,
-                    imm: BigImmediate::from(bytes >> 11),
+                    rd: (bytes >> 7) as u8 & 0b11111,
+                    imm: BigImmediate::from(bytes >> 12),
                 },
             }
         }
-        0010111 => {
+        0b0010111 => {
             // AUIPC
             Instruction::AUIPC {
                 data: U {
-                    rd: (bytes >> 6) as u8,
-                    imm: BigImmediate::from(bytes >> 11),
+                    rd: (bytes >> 7) as u8 & 0b11111,
+                    imm: BigImmediate::from(bytes >> 12),
                 },
             }
         }
@@ -403,8 +403,13 @@ impl ArchState {
         self.regs[reg - 1]
     }
 
-    fn set_register(&mut self, reg: usize, val: u32) {
-        self.regs[reg - 1] = val;
+    fn set_register(&mut self, index: usize, val: u32) {
+        if index == 0 {
+            return;
+        }
+        if let Some(reg) = self.regs.get_mut(index - 1) {
+            *reg = val;
+        }
     }
 
     pub fn load(&mut self, program: Vec<u8>, offset: usize) {
@@ -722,6 +727,15 @@ impl ArchState {
             }
         }
         self.pc += 4;
+    }
+
+    pub fn tick(&mut self) {
+        self.apply(&interpret_bytes(u32::from_be_bytes([
+            self.mem[self.pc as usize],
+            self.mem[self.pc as usize + 1],
+            self.mem[self.pc as usize + 2],
+            self.mem[self.pc as usize + 3],
+        ])));
     }
 }
 
