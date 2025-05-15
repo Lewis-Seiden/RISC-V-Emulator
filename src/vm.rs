@@ -1,4 +1,5 @@
 mod instruction_tests;
+mod integration_tests;
 
 type RegisterPointer = u8;
 /** 12 Bit Immediate */
