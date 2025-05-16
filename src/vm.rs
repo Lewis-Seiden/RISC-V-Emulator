@@ -1,4 +1,6 @@
+#[cfg(test)]
 mod instruction_tests;
+#[cfg(test)]
 mod integration_tests;
 
 type RegisterPointer = u8;
