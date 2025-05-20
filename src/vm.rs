@@ -171,7 +171,7 @@ fn transmute_to_unsigned(signed: i32) -> u32 {
 
 pub fn interpret_bytes(bytes: u32) -> Instruction {
     let opcode = bytes & 0b1111111;
-    let func3 = (bytes & (0b111 << 11)) >> 11;
+    let func3 = (bytes & (0b111 << 12)) >> 12;
     let nop = Instruction::ADDI {
         data: I {
             rd: 0,
@@ -189,16 +189,16 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
             };
             // check func3 and 30 bit for function
             match func3 + (bytes >> 27) {
-                0000 => Instruction::ADD { data },
-                1000 => Instruction::SUB { data },
-                0001 | 1001 => Instruction::SLL { data },
-                0010 | 1010 => Instruction::SLT { data },
-                0011 | 1011 => Instruction::SLTU { data },
-                0100 | 1100 => Instruction::XOR { data },
-                0101 => Instruction::SRL { data },
-                1101 => Instruction::SRA { data },
-                0110 | 1110 => Instruction::OR { data },
-                0111 | 1111 => Instruction::AND { data },
+                0b0000 => Instruction::ADD { data },
+                0b1000 => Instruction::SUB { data },
+                0b0001 | 1001 => Instruction::SLL { data },
+                0b0010 | 1010 => Instruction::SLT { data },
+                0b0011 | 1011 => Instruction::SLTU { data },
+                0b0100 | 1100 => Instruction::XOR { data },
+                0b0101 => Instruction::SRL { data },
+                0b1101 => Instruction::SRA { data },
+                0b0110 | 1110 => Instruction::OR { data },
+                0b0111 | 1111 => Instruction::AND { data },
                 _ => nop,
             }
         }
@@ -210,15 +210,15 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
                 imm: SmallImmediate::from(bytes >> 20),
             };
             match func3 {
-                000 => Instruction::ADDI { data },
-                010 => Instruction::SLTI { data },
-                011 => Instruction::SLTUI { data },
-                100 => Instruction::XORI { data },
-                110 => Instruction::ORI { data },
-                111 => Instruction::ANDI { data },
-                001 => Instruction::SLLI { data },
+                0b000 => Instruction::ADDI { data },
+                0b010 => Instruction::SLTI { data },
+                0b011 => Instruction::SLTUI { data },
+                0b100 => Instruction::XORI { data },
+                0b110 => Instruction::ORI { data },
+                0b111 => Instruction::ANDI { data },
+                0b001 => Instruction::SLLI { data },
                 // Check f7
-                101 => {
+                0b101 => {
                     if bytes & 2_u32.pow(30) == 0 {
                         Instruction::SRLI { data }
                     } else {
@@ -236,9 +236,9 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
                 imm: SmallImmediate::from((bytes >> 7) & 0b11111 + (bytes >> 24)),
             };
             match func3 {
-                000 => Instruction::SB { data },
-                001 => Instruction::SH { data },
-                010 => Instruction::SW { data },
+                0b000 => Instruction::SB { data },
+                0b001 => Instruction::SH { data },
+                0b010 => Instruction::SW { data },
                 _ => nop,
             }
         }
@@ -250,11 +250,11 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
                 imm: SmallImmediate::from(bytes >> 20),
             };
             match func3 {
-                000 => Instruction::LB { data },
-                001 => Instruction::LH { data },
-                010 => Instruction::LW { data },
-                100 => Instruction::LBU { data },
-                101 => Instruction::LHU { data },
+                0b000 => Instruction::LB { data },
+                0b001 => Instruction::LH { data },
+                0b010 => Instruction::LW { data },
+                0b100 => Instruction::LBU { data },
+                0b101 => Instruction::LHU { data },
                 _ => nop,
             }
         }
@@ -282,12 +282,12 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
                 ),
             };
             match func3 {
-                000 => Instruction::BEQ { data },
-                001 => Instruction::BNE { data },
-                100 => Instruction::BLT { data },
-                101 => Instruction::BGE { data },
-                110 => Instruction::BLTU { data },
-                111 => Instruction::BGEU { data },
+                0b000 => Instruction::BEQ { data },
+                0b001 => Instruction::BNE { data },
+                0b100 => Instruction::BLT { data },
+                0b101 => Instruction::BGE { data },
+                0b110 => Instruction::BLTU { data },
+                0b111 => Instruction::BGEU { data },
                 _ => nop,
             }
         }
@@ -330,7 +330,7 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
 
 impl ArchState {
     pub fn new() -> Self {
-        Self::with_mem(2_usize.pow(16))
+        Self::with_mem(2_usize.pow(32))
     }
 
     pub fn with_mem(cap: usize) -> Self {
