@@ -5,6 +5,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, poll, read},
     layout::{Constraint, Layout, Margin, Rect},
     prelude::{Backend, CrosstermBackend},
+    style::{Color, Style, Stylize},
     text::Text,
     widgets::Block,
 };
@@ -28,11 +29,16 @@ struct Inputs {
 impl GUI {
     pub fn new() -> Self {
         Self {
-            pause: false,
+            pause: true,
             step: false,
             arch_state: ArchState::new(),
             terminal: ratatui::init(),
         }
+    }
+
+    pub fn load(mut self, program: Vec<u8>, offset: usize) -> Self {
+        self.arch_state.load(program, offset);
+        self
     }
 
     pub fn get_state(&self) -> &ArchState {
@@ -90,11 +96,25 @@ impl GUI {
         let register_lines: [Rect; 33] = Layout::vertical([Constraint::Length(1); 33])
             .areas(register_area_block.inner(register_area));
 
-        frame.render_widget(Text::raw(format!("pc : {:0>4X}", pc)), register_lines[0]);
+        frame.render_widget(
+            Text::raw(format!("pc : 0x{0:0>8X} | {0:0>10} | ", pc)),
+            register_lines[0],
+        );
 
         (0..32).for_each(|i| {
             frame.render_widget(
-                Text::raw(format!("x{: <2}: {:0>2X}", i, registers.get(i).unwrap())),
+                Text::styled(
+                    format!(
+                        "x{: <2}: 0x{1:0>8X} | {1:0>10} | ",
+                        i,
+                        registers.get(i).unwrap()
+                    ),
+                    if i % 2 == 0 {
+                        Style::new().fg(Color::Black).bg(Color::Gray)
+                    } else {
+                        Style::new().fg(Color::Gray).bg(Color::Black)
+                    },
+                ),
                 register_lines[i + 1],
             )
         });
@@ -108,7 +128,7 @@ impl GUI {
                     step: false,
                     toggle_pause: c == ' ',
                 },
-                KeyCode::Left => Inputs {
+                KeyCode::Right => Inputs {
                     exit: false,
                     step: true,
                     toggle_pause: false,
