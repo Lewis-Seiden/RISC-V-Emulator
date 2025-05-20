@@ -7,10 +7,10 @@ use ratatui::{
     prelude::{Backend, CrosstermBackend},
     style::{Color, Style, Stylize},
     text::Text,
-    widgets::Block,
+    widgets::{Block, Paragraph, Wrap},
 };
 
-use crate::vm::ArchState;
+use crate::vm::{self, ArchState, Instruction};
 
 pub struct GUI {
     pause: bool,
@@ -51,7 +51,13 @@ impl GUI {
                 GUI::draw(
                     frame,
                     self.arch_state.pc as usize,
-                    (0..32).map(|i| self.arch_state.get_register(i)).collect(),
+                    &(0..32).map(|i| self.arch_state.get_register(i)).collect(),
+                    &vm::interpret_bytes(u32::from_be_bytes([
+                        self.arch_state.mem[self.arch_state.pc as usize],
+                        self.arch_state.mem[self.arch_state.pc as usize + 1],
+                        self.arch_state.mem[self.arch_state.pc as usize + 2],
+                        self.arch_state.mem[self.arch_state.pc as usize + 3],
+                    ])),
                 )
             })?;
 
@@ -80,7 +86,7 @@ impl GUI {
         }
     }
 
-    fn draw(frame: &mut Frame, pc: usize, registers: Vec<u32>) {
+    fn draw(frame: &mut Frame, pc: usize, registers: &Vec<u32>, instruction: &Instruction) {
         let columns = Layout::horizontal([Constraint::Min(6), Constraint::Min(0)]);
         let [register_area, main_area] = columns.areas(frame.area());
         let rhs_rows = Layout::vertical([Constraint::Fill(1), Constraint::Length(5)]);
@@ -93,8 +99,10 @@ impl GUI {
         frame.render_widget(&control_area_block, control_area);
         frame.render_widget(Text::raw("Hello World"), mem_area_block.inner(mem_area));
 
-        let register_lines: [Rect; 33] = Layout::vertical([Constraint::Length(1); 33])
-            .areas(register_area_block.inner(register_area));
+        const REGISTER_AREA_LINES: usize = 34;
+        let register_lines: [Rect; REGISTER_AREA_LINES] =
+            Layout::vertical([Constraint::Length(1); REGISTER_AREA_LINES])
+                .areas(register_area_block.inner(register_area));
 
         frame.render_widget(
             Text::raw(format!("pc : 0x{0:0>8X} | {0:0>10} | ", pc)),
@@ -118,6 +126,11 @@ impl GUI {
                 register_lines[i + 1],
             )
         });
+
+        frame.render_widget(
+            Paragraph::new(format!("{:?}", instruction)).wrap(Wrap::default()),
+            register_lines[32].union(register_lines[33]),
+        );
     }
 
     fn handle_input(event: Event) -> Inputs {

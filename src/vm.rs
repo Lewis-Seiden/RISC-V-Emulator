@@ -1,3 +1,5 @@
+use std::u32;
+
 #[cfg(test)]
 mod instruction_tests;
 #[cfg(test)]
@@ -45,16 +47,25 @@ trait SignExtend {
 
 impl SignExtend for SmallImmediate {
     fn sign_extend(&self) -> i32 {
-        let msb = self.val & 1 << 11 == 1;
+        let msb = self.val & (1 << 11) != 0;
         transmute_to_signed(if msb { self.val + 0xFFFFF000 } else { self.val })
     }
 }
 
 impl SignExtend for BigImmediate {
     fn sign_extend(&self) -> i32 {
-        let msb = self.val & 1 << 11 == 1;
-        transmute_to_signed(if msb { self.val + 0xFFFFF000 } else { self.val })
+        let msb = self.val & (1 << 19) != 0;
+        transmute_to_signed(if msb { self.val + 0xFFF00000 } else { self.val })
     }
+}
+
+#[test]
+fn test_sign_extension() {
+    assert_eq!(1, SmallImmediate::from(1).sign_extend());
+    assert_eq!(-1, SmallImmediate::from(2_u32.pow(12) - 1).sign_extend());
+
+    assert_eq!(1, BigImmediate::from(1).sign_extend());
+    assert_eq!(-1, BigImmediate::from(2_u32.pow(20) - 1).sign_extend());
 }
 
 // Instruction Formats
