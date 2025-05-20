@@ -1,4 +1,7 @@
-use std::u32;
+use std::{
+    fmt::{Display, Write},
+    u32,
+};
 
 #[cfg(test)]
 mod instruction_tests;
@@ -153,6 +156,18 @@ pub enum Instruction {
 
     ECALL { data: I },
     EBREAK { data: I },
+}
+
+impl Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            format_args!("{:?}", self)
+                .to_string()
+                .split_whitespace()
+                .next()
+                .unwrap(),
+        )
+    }
 }
 
 pub struct ArchState {

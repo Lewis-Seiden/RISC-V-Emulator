@@ -89,7 +89,7 @@ impl GUI {
     fn draw(frame: &mut Frame, pc: usize, registers: &Vec<u32>, instruction: &Instruction) {
         let columns = Layout::horizontal([Constraint::Min(6), Constraint::Min(0)]);
         let [register_area, main_area] = columns.areas(frame.area());
-        let rhs_rows = Layout::vertical([Constraint::Fill(1), Constraint::Length(5)]);
+        let rhs_rows = Layout::vertical([Constraint::Fill(1), Constraint::Length(8)]);
         let [mem_area, control_area] = rhs_rows.areas(main_area);
         let register_area_block = Block::bordered();
         let mem_area_block = Block::bordered();
@@ -127,9 +127,28 @@ impl GUI {
             )
         });
 
+        // frame.render_widget(
+        //     Paragraph::new(format!("{:?}", instruction)).wrap(Wrap::default()),
+        //     control_area_block.inner(control_area),
+        // );
+
+        let [instruction_area, ui_area] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(1)])
+                .areas(control_area_block.inner(control_area));
+
+        let [instruction_name_area, instruction_data_area] =
+            Layout::horizontal([Constraint::Length(8), Constraint::Fill(1)])
+                .areas(instruction_area);
+        frame.render_widget(Text::raw(format!("{}", instruction)), instruction_name_area);
         frame.render_widget(
-            Paragraph::new(format!("{:?}", instruction)).wrap(Wrap::default()),
-            register_lines[32].union(register_lines[33]),
+            Text::raw(
+                format!("{:?}", instruction)
+                    .to_string()
+                    .split_whitespace()
+                    .skip(1)
+                    .collect::<String>(),
+            ),
+            instruction_data_area,
         );
     }
 
