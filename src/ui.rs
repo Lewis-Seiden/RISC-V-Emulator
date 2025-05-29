@@ -136,20 +136,20 @@ impl GUI {
             Layout::vertical([Constraint::Length(1), Constraint::Min(1)])
                 .areas(control_area_block.inner(control_area));
 
-        let [instruction_name_area, instruction_data_area] =
-            Layout::horizontal([Constraint::Length(8), Constraint::Fill(1)])
-                .areas(instruction_area);
-        frame.render_widget(Text::raw(format!("{}", instruction)), instruction_name_area);
-        frame.render_widget(
-            Text::raw(
-                format!("{:?}", instruction)
-                    .to_string()
-                    .split_whitespace()
-                    .skip(1)
-                    .collect::<String>(),
-            ),
-            instruction_data_area,
-        );
+        // let [instruction_name_area, instruction_data_area] =
+        //     Layout::horizontal([Constraint::Length(8), Constraint::Fill(1)])
+        //         .areas(instruction_area);
+        frame.render_widget(Text::raw(format!("{}", instruction)), instruction_area);
+        // frame.render_widget(
+        //     Text::raw(
+        //         format!("{}", instruction)
+        //             .to_string()
+        //             .split_whitespace()
+        //             .skip(1)
+        //             .collect::<String>(),
+        //     ),
+        //     instruction_data_area,
+        // );
     }
 
     fn handle_input(event: Event) -> Inputs {

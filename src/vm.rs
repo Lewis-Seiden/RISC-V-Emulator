@@ -81,9 +81,9 @@ pub struct R {
 
 impl Display for R {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("rd:  x{}", self.rd))?;
-        f.write_fmt(format_args!("rs1: x{}", self.rs1))?;
-        f.write_fmt(format_args!("rs2: x{}", self.rs2))?;
+        f.write_fmt(format_args!("rd:  x{} | ", self.rd))?;
+        f.write_fmt(format_args!("rs1: x{} | ", self.rs1))?;
+        f.write_fmt(format_args!("rs2: x{} | ", self.rs2))?;
         Ok(())
     }
 }
@@ -97,9 +97,9 @@ pub struct I {
 
 impl Display for I {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("rd:  x{}", self.rd))?;
-        f.write_fmt(format_args!("rs1: x{}", self.rs1))?;
-        f.write_fmt(format_args!("imm: {:#014b}", self.imm.val))?;
+        f.write_fmt(format_args!("rd:  x{} | ", self.rd))?;
+        f.write_fmt(format_args!("rs1: x{} | ", self.rs1))?;
+        f.write_fmt(format_args!("imm: {:#014b} | ", self.imm.val))?;
         Ok(())
     }
 }
@@ -110,12 +110,11 @@ pub struct S {
     rs1: RegisterPointer,
     rs2: RegisterPointer,
 }
-
 impl Display for S {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("rs1: x{}", self.rs1))?;
-        f.write_fmt(format_args!("rs2: x{}", self.rs2))?;
-        f.write_fmt(format_args!("imm: {:#014b}", self.imm.val))?;
+        f.write_fmt(format_args!("rs1: x{} | ", self.rs1))?;
+        f.write_fmt(format_args!("rs2: x{} | ", self.rs2))?;
+        f.write_fmt(format_args!("imm: {:#014b} | ", self.imm.val))?;
         Ok(())
     }
 }
@@ -128,8 +127,8 @@ pub struct U {
 
 impl Display for U {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("rd:  x{}", self.rd))?;
-        f.write_fmt(format_args!("imm: {:#022b}", self.imm.val))?;
+        f.write_fmt(format_args!("rd:  x{} | ", self.rd))?;
+        f.write_fmt(format_args!("imm: {:#022b} | ", self.imm.val))?;
         Ok(())
     }
 }
@@ -144,9 +143,9 @@ pub struct B {
 
 impl Display for B {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("rs1: x{}", self.rs1))?;
-        f.write_fmt(format_args!("rs2: x{}", self.rs2))?;
-        f.write_fmt(format_args!("imm: {:#014b}", self.imm.val))?;
+        f.write_fmt(format_args!("rs1: x{} | ", self.rs1))?;
+        f.write_fmt(format_args!("rs2: x{} | ", self.rs2))?;
+        f.write_fmt(format_args!("imm: {:#014b} | ", self.imm.val))?;
         Ok(())
     }
 }
@@ -159,8 +158,8 @@ pub struct J {
 
 impl Display for J {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("rd:  x{}", self.rd))?;
-        f.write_fmt(format_args!("imm: {:#022b}", self.imm.val))?;
+        f.write_fmt(format_args!("rd:  x{} | ", self.rd))?;
+        f.write_fmt(format_args!("imm: {:#022b} | ", self.imm.val))?;
         Ok(())
     }
 }
@@ -215,6 +214,52 @@ pub enum Instruction {
     EBREAK { data: I },
 }
 
+impl Instruction {
+    fn get_payload(&self) -> String {
+        match self {
+            Instruction::ADD { data } => data.to_string(),
+            Instruction::SUB { data } => data.to_string(),
+            Instruction::XOR { data } => data.to_string(),
+            Instruction::OR { data } => data.to_string(),
+            Instruction::AND { data } => data.to_string(),
+            Instruction::SLL { data } => data.to_string(),
+            Instruction::SRL { data } => data.to_string(),
+            Instruction::SRA { data } => data.to_string(),
+            Instruction::SLT { data } => data.to_string(),
+            Instruction::SLTU { data } => data.to_string(),
+            Instruction::ADDI { data } => data.to_string(),
+            Instruction::XORI { data } => data.to_string(),
+            Instruction::ORI { data } => data.to_string(),
+            Instruction::ANDI { data } => data.to_string(),
+            Instruction::SLLI { data } => data.to_string(),
+            Instruction::SRLI { data } => data.to_string(),
+            Instruction::SRAI { data } => data.to_string(),
+            Instruction::SLTI { data } => data.to_string(),
+            Instruction::SLTUI { data } => data.to_string(),
+            Instruction::LB { data } => data.to_string(),
+            Instruction::LH { data } => data.to_string(),
+            Instruction::LW { data } => data.to_string(),
+            Instruction::LBU { data } => data.to_string(),
+            Instruction::LHU { data } => data.to_string(),
+            Instruction::SB { data } => data.to_string(),
+            Instruction::SH { data } => data.to_string(),
+            Instruction::SW { data } => data.to_string(),
+            Instruction::BEQ { data } => data.to_string(),
+            Instruction::BNE { data } => data.to_string(),
+            Instruction::BLT { data } => data.to_string(),
+            Instruction::BGE { data } => data.to_string(),
+            Instruction::BLTU { data } => data.to_string(),
+            Instruction::BGEU { data } => data.to_string(),
+            Instruction::JAL { data } => data.to_string(),
+            Instruction::JALR { data } => data.to_string(),
+            Instruction::LUI { data } => data.to_string(),
+            Instruction::AUIPC { data } => data.to_string(),
+            Instruction::ECALL { data } => data.to_string(),
+            Instruction::EBREAK { data } => data.to_string(),
+        }
+    }
+}
+
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(
@@ -223,7 +268,9 @@ impl Display for Instruction {
                 .split_whitespace()
                 .next()
                 .unwrap(),
-        )
+        )?;
+        f.write_fmt(format_args!(" {}", self.get_payload()))?;
+        Ok(())
     }
 }
 
