@@ -78,23 +78,62 @@ pub struct R {
     rs1: RegisterPointer,
     rs2: RegisterPointer,
 }
+
+impl Display for R {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("rd:  x{}", self.rd))?;
+        f.write_fmt(format_args!("rs1: x{}", self.rs1))?;
+        f.write_fmt(format_args!("rs2: x{}", self.rs2))?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct I {
     rd: RegisterPointer,
     rs1: RegisterPointer,
     imm: SmallImmediate,
 }
+
+impl Display for I {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("rd:  x{}", self.rd))?;
+        f.write_fmt(format_args!("rs1: x{}", self.rs1))?;
+        f.write_fmt(format_args!("imm: {:#014b}", self.imm.val))?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct S {
     imm: SmallImmediate,
     rs1: RegisterPointer,
     rs2: RegisterPointer,
 }
+
+impl Display for S {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("rs1: x{}", self.rs1))?;
+        f.write_fmt(format_args!("rs2: x{}", self.rs2))?;
+        f.write_fmt(format_args!("imm: {:#014b}", self.imm.val))?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct U {
     rd: RegisterPointer,
     imm: BigImmediate,
 }
+
+impl Display for U {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("rd:  x{}", self.rd))?;
+        f.write_fmt(format_args!("imm: {:#022b}", self.imm.val))?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 // Immediate mode variants
 pub struct B {
@@ -102,11 +141,29 @@ pub struct B {
     rs1: RegisterPointer,
     rs2: RegisterPointer,
 } // Variant of S
+
+impl Display for B {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("rs1: x{}", self.rs1))?;
+        f.write_fmt(format_args!("rs2: x{}", self.rs2))?;
+        f.write_fmt(format_args!("imm: {:#014b}", self.imm.val))?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct J {
     rd: RegisterPointer,
     imm: BigImmediate,
 } // Variant of U
+
+impl Display for J {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("rd:  x{}", self.rd))?;
+        f.write_fmt(format_args!("imm: {:#022b}", self.imm.val))?;
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub enum Instruction {
