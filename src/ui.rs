@@ -2,12 +2,17 @@ use std::{error::Error, fmt::format, io::Stdout, time::Duration};
 
 use ratatui::{
     Frame, Terminal,
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, poll, read},
+    crossterm::event::{
+        self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind, poll, read,
+    },
     layout::{Constraint, Layout, Margin, Rect},
     prelude::{Backend, CrosstermBackend},
     style::{Color, Style, Stylize},
     text::Text,
-    widgets::{Block, Paragraph, Wrap},
+    widgets::{
+        Block, Cell, Paragraph, Row, ScrollDirection, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Table, TableState, Wrap,
+    },
 };
 
 use crate::vm::{self, ArchState, Instruction};
@@ -20,10 +25,18 @@ pub struct GUI {
 }
 
 #[derive(Default)]
+struct GUIState {
+    mem_table_state: TableState,
+    mem_scroll_pos: usize,
+}
+
+#[derive(Default, Debug)]
 struct Inputs {
     exit: bool,
     step: bool,
     toggle_pause: bool,
+    scroll_dir: Option<ScrollDirection>,
+    cursor_location: (u16, u16),
 }
 
 impl GUI {
@@ -46,7 +59,38 @@ impl GUI {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut gui_state = GUIState {
+            // mem_scrollbar_state: ScrollbarState::default()
+            //     // .content_length(self.arch_state.mem.len()),
+            //     .content_length(128),
+            mem_table_state: TableState::new(),
+            ..Default::default()
+        };
         loop {
+            let inputs = if poll(Duration::from_millis(20)).is_ok_and(|has_event| has_event) {
+                if let Ok(event) = read() {
+                    GUI::handle_input(event)
+                } else {
+                    Inputs::default()
+                }
+            } else {
+                Inputs::default()
+            };
+            inputs.scroll_dir.inspect(|dir| {
+                if *dir == ScrollDirection::Forward {
+                    gui_state.mem_scroll_pos = gui_state.mem_scroll_pos.saturating_add(1);
+                } else { 
+                    gui_state.mem_scroll_pos = gui_state.mem_scroll_pos.saturating_sub(1);
+                }
+            });
+            // inputs.scroll_dir.inspect(|dir| {
+            //     if *dir == ScrollDirection::Backward {
+            //         gui_state.mem_table_state.scroll_up_by(1)
+            //     } else {
+            //         gui_state.mem_table_state.scroll_down_by(1)
+            //     }
+            // });
+
             self.terminal.draw(|frame| {
                 GUI::draw(
                     frame,
@@ -58,19 +102,15 @@ impl GUI {
                         self.arch_state.mem[self.arch_state.pc as usize + 2],
                         self.arch_state.mem[self.arch_state.pc as usize + 3],
                     ])),
-                )
-            })?;
+                    &self.arch_state.mem,
+                    &mut gui_state,
+                    &inputs,
+                );
 
-            // TODO: clean
-            let inputs = if poll(Duration::from_millis(20)).is_ok_and(|b| b) {
-                if let Ok(event) = read() {
-                    GUI::handle_input(event)
-                } else {
-                    Inputs::default()
-                }
-            } else {
-                Inputs::default()
-            };
+                if cfg!(debug_assertions) {
+                    frame.render_widget(Text::raw(format!("{:?}", inputs)), frame.area())
+                };
+            })?;
 
             if inputs.exit {
                 return Ok(());
@@ -86,7 +126,15 @@ impl GUI {
         }
     }
 
-    fn draw(frame: &mut Frame, pc: usize, registers: &Vec<u32>, instruction: &Instruction) {
+    fn draw(
+        frame: &mut Frame,
+        pc: usize,
+        registers: &Vec<u32>,
+        instruction: &Instruction,
+        mem: &Vec<u8>,
+        gui_state: &mut GUIState,
+        inputs: &Inputs,
+    ) {
         let columns = Layout::horizontal([Constraint::Min(6), Constraint::Min(0)]);
         let [register_area, main_area] = columns.areas(frame.area());
         let rhs_rows = Layout::vertical([Constraint::Fill(1), Constraint::Length(8)]);
@@ -97,7 +145,34 @@ impl GUI {
         frame.render_widget(&register_area_block, register_area);
         frame.render_widget(&mem_area_block, mem_area);
         frame.render_widget(&control_area_block, control_area);
-        frame.render_widget(Text::raw("Hello World"), mem_area_block.inner(mem_area));
+
+        // Memory Readout
+        gui_state.mem_scroll_pos = gui_state.mem_scroll_pos.clamp(0, mem.len() - mem_area.height as usize + 2);
+        let mem_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
+        let mem_table = Table::new(
+            mem[gui_state.mem_scroll_pos..gui_state.mem_scroll_pos + mem_area.height as usize - 2]
+                .iter()
+                .enumerate()
+                .map(|(i, byte)| {
+                    Row::new([
+                        Cell::new(format!("{:x}", i + gui_state.mem_scroll_pos)),
+                        Cell::new(format!("{:x}", byte)),
+                    ])
+                }),
+            [Constraint::Fill(1), Constraint::Length(2)],
+        )
+        .row_highlight_style(Style::new().fg(Color::Black).bg(Color::Gray));
+
+        frame.render_stateful_widget(
+            mem_table,
+            mem_area_block.inner(mem_area),
+            &mut gui_state.mem_table_state,
+        );
+        frame.render_stateful_widget(
+            mem_scrollbar,
+            mem_area,
+            &mut ScrollbarState::new(mem.len() - mem_area.height as usize).position(gui_state.mem_scroll_pos),
+        );
 
         const REGISTER_AREA_LINES: usize = 34;
         let register_lines: [Rect; REGISTER_AREA_LINES] =
@@ -127,11 +202,6 @@ impl GUI {
             )
         });
 
-        // frame.render_widget(
-        //     Paragraph::new(format!("{:?}", instruction)).wrap(Wrap::default()),
-        //     control_area_block.inner(control_area),
-        // );
-
         let [instruction_area, ui_area] =
             Layout::vertical([Constraint::Length(1), Constraint::Min(1)])
                 .areas(control_area_block.inner(control_area));
@@ -144,25 +214,40 @@ impl GUI {
             Event::Key(key_event) => match key_event.code {
                 KeyCode::Char(c) => Inputs {
                     exit: c == 'q',
-                    step: false,
                     toggle_pause: c == ' ',
+                    ..Default::default()
                 },
                 KeyCode::Right => Inputs {
-                    exit: false,
                     step: true,
-                    toggle_pause: false,
+                    ..Default::default()
+                },
+                KeyCode::Down => Inputs {
+                    scroll_dir: Some(ScrollDirection::Forward),
+                    ..Default::default()
+                },
+                KeyCode::Up => Inputs {
+                    scroll_dir: Some(ScrollDirection::Backward),
+                    ..Default::default()
+                },
+                _ => Inputs::default(),
+            },
+            Event::Mouse(mouse_event) => match mouse_event.kind {
+                MouseEventKind::ScrollDown => Inputs {
+                    scroll_dir: Some(ScrollDirection::Forward),
+                    cursor_location: (mouse_event.column, mouse_event.row),
+                    ..Default::default()
+                },
+                MouseEventKind::ScrollUp => Inputs {
+                    scroll_dir: Some(ScrollDirection::Backward),
+                    cursor_location: (mouse_event.column, mouse_event.row),
+                    ..Default::default()
                 },
                 _ => Inputs {
-                    exit: false,
-                    step: false,
-                    toggle_pause: false,
+                    cursor_location: (mouse_event.column, mouse_event.row),
+                    ..Default::default()
                 },
             },
-            _ => Inputs {
-                exit: false,
-                step: false,
-                toggle_pause: false,
-            },
+            _ => Inputs::default(),
         }
     }
 }
