@@ -2,16 +2,14 @@ use std::{error::Error, io::Stdout, time::Duration};
 
 use ratatui::{
     Frame, Terminal,
-    crossterm::event::{
-        Event, KeyCode, MouseEventKind, poll, read,
-    },
-    layout::{Constraint, Layout, Rect},
+    crossterm::event::{Event, KeyCode, MouseEventKind, poll, read},
+    layout::{Constraint, Layout, Margin, Rect},
     prelude::CrosstermBackend,
     style::{Color, Style},
     text::Text,
     widgets::{
-        Block, Cell, Row, ScrollDirection, Scrollbar, ScrollbarOrientation,
-        ScrollbarState, Table, TableState,
+        Block, Cell, Row, ScrollDirection, Scrollbar, ScrollbarOrientation, ScrollbarState, Table,
+        TableState,
     },
 };
 
@@ -28,6 +26,7 @@ pub struct GUI {
 struct GUIState {
     mem_table_state: TableState,
     mem_scroll_pos: usize,
+    reg_table_state: TableState,
 }
 
 #[derive(Default, Debug)]
@@ -94,6 +93,7 @@ impl GUI {
             self.terminal.draw(|frame| {
                 GUI::draw(
                     frame,
+                    self.pause,
                     self.arch_state.pc as usize,
                     &(0..32).map(|i| self.arch_state.get_register(i)).collect(),
                     &vm::interpret_bytes(u32::from_be_bytes([
@@ -128,6 +128,7 @@ impl GUI {
 
     fn draw(
         frame: &mut Frame,
+        paused: bool,
         pc: usize,
         registers: &Vec<u32>,
         instruction: &Instruction,
@@ -177,39 +178,39 @@ impl GUI {
                 .position(gui_state.mem_scroll_pos),
         );
 
-        const REGISTER_AREA_LINES: usize = 34;
-        let register_lines: [Rect; REGISTER_AREA_LINES] =
-            Layout::vertical([Constraint::Length(1); REGISTER_AREA_LINES])
+        let [pc_area, reg_table_area] =
+            Layout::vertical([Constraint::Length(2), Constraint::Fill(1)])
                 .areas(register_area_block.inner(register_area));
 
         frame.render_widget(
-            Text::raw(format!("pc : 0x{0:0>8X} | {0:0>10} | ", pc)),
-            register_lines[0],
+            Text::raw(format!("pc : 0x{0:0>8X} | {0:0>10}", pc)),
+            pc_area,
         );
 
-        (0..32).for_each(|i| {
-            frame.render_widget(
-                Text::styled(
-                    format!(
-                        "x{: <2}: 0x{1:0>8X} | {1:0>10} | ",
+        let reg_table = Table::new(
+            (0..32)
+                .map(|i| {
+                    Row::new([Cell::new(format!(
+                        "x{: <2}: 0x{1:0>8X} | {1:0>10}",
                         i,
                         registers.get(i).unwrap()
-                    ),
-                    if i % 2 == 0 {
-                        Style::new().fg(Color::Black).bg(Color::Gray)
-                    } else {
-                        Style::new().fg(Color::Gray).bg(Color::Black)
-                    },
-                ),
-                register_lines[i + 1],
-            )
-        });
+                    ))])
+                })
+                .collect::<Vec<Row>>(),
+            [Constraint::Fill(1)],
+        );
+
+        frame.render_stateful_widget(reg_table, reg_table_area, &mut TableState::new());
 
         let [instruction_area, ui_area] =
             Layout::vertical([Constraint::Length(1), Constraint::Min(1)])
                 .areas(control_area_block.inner(control_area));
 
         frame.render_widget(Text::raw(format!("{}", instruction)), instruction_area);
+        frame.render_widget(
+            Text::raw(format!("\n{}", if paused { "||" } else { ">>" })),
+            ui_area,
+        );
     }
 
     fn handle_input(event: Event) -> Inputs {

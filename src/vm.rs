@@ -83,7 +83,7 @@ impl Display for R {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("rd:  x{} | ", self.rd))?;
         f.write_fmt(format_args!("rs1: x{} | ", self.rs1))?;
-        f.write_fmt(format_args!("rs2: x{} | ", self.rs2))?;
+        f.write_fmt(format_args!("rs2: x{}", self.rs2))?;
         Ok(())
     }
 }
@@ -99,7 +99,7 @@ impl Display for I {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("rd:  x{} | ", self.rd))?;
         f.write_fmt(format_args!("rs1: x{} | ", self.rs1))?;
-        f.write_fmt(format_args!("imm: {:#014b} | ", self.imm.val))?;
+        f.write_fmt(format_args!("imm: {:#014b}", self.imm.val))?;
         Ok(())
     }
 }
@@ -114,7 +114,7 @@ impl Display for S {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("rs1: x{} | ", self.rs1))?;
         f.write_fmt(format_args!("rs2: x{} | ", self.rs2))?;
-        f.write_fmt(format_args!("imm: {:#014b} | ", self.imm.val))?;
+        f.write_fmt(format_args!("imm: {:#014b}", self.imm.val))?;
         Ok(())
     }
 }
@@ -128,7 +128,7 @@ pub struct U {
 impl Display for U {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("rd:  x{} | ", self.rd))?;
-        f.write_fmt(format_args!("imm: {:#022b} | ", self.imm.val))?;
+        f.write_fmt(format_args!("imm: {:#022b}", self.imm.val))?;
         Ok(())
     }
 }
@@ -145,7 +145,7 @@ impl Display for B {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("rs1: x{} | ", self.rs1))?;
         f.write_fmt(format_args!("rs2: x{} | ", self.rs2))?;
-        f.write_fmt(format_args!("imm: {:#014b} | ", self.imm.val))?;
+        f.write_fmt(format_args!("imm: {:#014b}", self.imm.val))?;
         Ok(())
     }
 }
@@ -159,7 +159,7 @@ pub struct J {
 impl Display for J {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("rd:  x{} | ", self.rd))?;
-        f.write_fmt(format_args!("imm: {:#022b} | ", self.imm.val))?;
+        f.write_fmt(format_args!("imm: {:#022b}", self.imm.val))?;
         Ok(())
     }
 }
