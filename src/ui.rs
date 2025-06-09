@@ -1,17 +1,17 @@
-use std::{error::Error, fmt::format, io::Stdout, time::Duration};
+use std::{error::Error, io::Stdout, time::Duration};
 
 use ratatui::{
     Frame, Terminal,
     crossterm::event::{
-        self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEventKind, poll, read,
+        Event, KeyCode, MouseEventKind, poll, read,
     },
-    layout::{Constraint, Layout, Margin, Rect},
-    prelude::{Backend, CrosstermBackend},
-    style::{Color, Style, Stylize},
+    layout::{Constraint, Layout, Rect},
+    prelude::CrosstermBackend,
+    style::{Color, Style},
     text::Text,
     widgets::{
-        Block, Cell, Paragraph, Row, ScrollDirection, Scrollbar, ScrollbarOrientation,
-        ScrollbarState, Table, TableState, Wrap,
+        Block, Cell, Row, ScrollDirection, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Table, TableState,
     },
 };
 
@@ -79,7 +79,7 @@ impl GUI {
             inputs.scroll_dir.inspect(|dir| {
                 if *dir == ScrollDirection::Forward {
                     gui_state.mem_scroll_pos = gui_state.mem_scroll_pos.saturating_add(1);
-                } else { 
+                } else {
                     gui_state.mem_scroll_pos = gui_state.mem_scroll_pos.saturating_sub(1);
                 }
             });
@@ -147,7 +147,9 @@ impl GUI {
         frame.render_widget(&control_area_block, control_area);
 
         // Memory Readout
-        gui_state.mem_scroll_pos = gui_state.mem_scroll_pos.clamp(0, mem.len() - mem_area.height as usize + 2);
+        gui_state.mem_scroll_pos = gui_state
+            .mem_scroll_pos
+            .clamp(0, mem.len() - mem_area.height as usize + 2);
         let mem_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
         let mem_table = Table::new(
             mem[gui_state.mem_scroll_pos..gui_state.mem_scroll_pos + mem_area.height as usize - 2]
@@ -171,7 +173,8 @@ impl GUI {
         frame.render_stateful_widget(
             mem_scrollbar,
             mem_area,
-            &mut ScrollbarState::new(mem.len() - mem_area.height as usize).position(gui_state.mem_scroll_pos),
+            &mut ScrollbarState::new(mem.len() - mem_area.height as usize)
+                .position(gui_state.mem_scroll_pos),
         );
 
         const REGISTER_AREA_LINES: usize = 34;
