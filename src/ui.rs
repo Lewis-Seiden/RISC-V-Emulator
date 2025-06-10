@@ -2,8 +2,13 @@ use std::{error::Error, io::Stdout, time::Duration};
 
 use ratatui::{
     Frame, Terminal,
-    crossterm::event::{Event, KeyCode, MouseEventKind, poll, read},
-    layout::{Constraint, Layout, Margin, Rect},
+    crossterm::{
+        event::{
+            DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseEventKind, poll, read,
+        },
+        execute,
+    },
+    layout::{Constraint, Layout, Margin, Position, Rect},
     prelude::CrosstermBackend,
     style::{Color, Style},
     text::Text,
@@ -22,11 +27,13 @@ pub struct GUI {
     terminal: Terminal<CrosstermBackend<Stdout>>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct GUIState {
     mem_table_state: TableState,
     mem_scroll_pos: usize,
     reg_table_state: TableState,
+    reg_scroll_pos: usize,
+    last_mouse_pos: Position,
 }
 
 #[derive(Default, Debug)]
@@ -35,7 +42,7 @@ struct Inputs {
     step: bool,
     toggle_pause: bool,
     scroll_dir: Option<ScrollDirection>,
-    cursor_location: (u16, u16),
+    mouse_loc: Option<(u16, u16)>,
 }
 
 impl GUI {
@@ -58,16 +65,16 @@ impl GUI {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        execute!(std::io::stdout(), EnableMouseCapture)?;
         let mut gui_state = GUIState {
-            // mem_scrollbar_state: ScrollbarState::default()
-            //     // .content_length(self.arch_state.mem.len()),
-            //     .content_length(128),
             mem_table_state: TableState::new(),
             ..Default::default()
         };
         loop {
-            let inputs = if poll(Duration::from_millis(20)).is_ok_and(|has_event| has_event) {
+            let mut log_event = None;
+            let inputs = if poll(Duration::from_millis(100)).is_ok_and(|has_event| has_event) {
                 if let Ok(event) = read() {
+                    log_event = Some(event.clone());
                     GUI::handle_input(event)
                 } else {
                     Inputs::default()
@@ -75,20 +82,10 @@ impl GUI {
             } else {
                 Inputs::default()
             };
-            inputs.scroll_dir.inspect(|dir| {
-                if *dir == ScrollDirection::Forward {
-                    gui_state.mem_scroll_pos = gui_state.mem_scroll_pos.saturating_add(1);
-                } else {
-                    gui_state.mem_scroll_pos = gui_state.mem_scroll_pos.saturating_sub(1);
-                }
-            });
-            // inputs.scroll_dir.inspect(|dir| {
-            //     if *dir == ScrollDirection::Backward {
-            //         gui_state.mem_table_state.scroll_up_by(1)
-            //     } else {
-            //         gui_state.mem_table_state.scroll_down_by(1)
-            //     }
-            // });
+
+            inputs
+                .mouse_loc
+                .inspect(|(x, y)| gui_state.last_mouse_pos = Position::new(*x, *y));
 
             self.terminal.draw(|frame| {
                 GUI::draw(
@@ -108,12 +105,15 @@ impl GUI {
                 );
 
                 if cfg!(debug_assertions) {
-                    frame.render_widget(Text::raw(format!("{:?}", inputs)), frame.area())
+                    frame.render_widget(
+                        Text::raw(format!("{:?} {:?}", inputs, log_event)),
+                        frame.area(),
+                    )
                 };
             })?;
 
             if inputs.exit {
-                return Ok(());
+                break;
             }
 
             self.step = inputs.step;
@@ -124,6 +124,8 @@ impl GUI {
                 self.step = false;
             }
         }
+        execute!(std::io::stdout(), DisableMouseCapture)?;
+        Ok(())
     }
 
     fn draw(
@@ -147,7 +149,26 @@ impl GUI {
         frame.render_widget(&mem_area_block, mem_area);
         frame.render_widget(&control_area_block, control_area);
 
-        // Memory Readout
+        inputs.scroll_dir.inspect(|dir| {
+            let scroll_motion = if *dir == ScrollDirection::Forward {
+                1
+            } else {
+                -1
+            };
+            if mem_area.contains(gui_state.last_mouse_pos) {
+                gui_state.mem_scroll_pos = gui_state
+                    .mem_scroll_pos
+                    .saturating_add_signed(scroll_motion);
+            }
+            if register_area.contains(gui_state.last_mouse_pos) {
+                gui_state.reg_scroll_pos = gui_state
+                    .reg_scroll_pos
+                    .saturating_add_signed(scroll_motion);
+            }
+        });
+        *gui_state.reg_table_state.offset_mut() = gui_state.reg_scroll_pos;
+
+        // Memory readout
         gui_state.mem_scroll_pos = gui_state
             .mem_scroll_pos
             .clamp(0, mem.len() - mem_area.height as usize + 2);
@@ -178,14 +199,21 @@ impl GUI {
                 .position(gui_state.mem_scroll_pos),
         );
 
+        // pc & reg readouts
         let [pc_area, reg_table_area] =
             Layout::vertical([Constraint::Length(2), Constraint::Fill(1)])
                 .areas(register_area_block.inner(register_area));
+        
+        gui_state.reg_scroll_pos = gui_state
+            .reg_scroll_pos
+            .clamp(0, 32_usize.saturating_sub(reg_table_area.height as usize));
 
         frame.render_widget(
             Text::raw(format!("pc : 0x{0:0>8X} | {0:0>10}", pc)),
             pc_area,
         );
+
+        let reg_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
 
         let reg_table = Table::new(
             (0..32)
@@ -200,7 +228,13 @@ impl GUI {
             [Constraint::Fill(1)],
         );
 
-        frame.render_stateful_widget(reg_table, reg_table_area, &mut TableState::new());
+        frame.render_stateful_widget(reg_table, reg_table_area, &mut gui_state.reg_table_state);
+        frame.render_stateful_widget(
+            reg_scrollbar,
+            register_area,
+            &mut ScrollbarState::new(32_usize.saturating_sub(reg_table_area.height as usize))
+                .position(gui_state.reg_scroll_pos),
+        );
 
         let [instruction_area, ui_area] =
             Layout::vertical([Constraint::Length(1), Constraint::Min(1)])
@@ -238,16 +272,17 @@ impl GUI {
             Event::Mouse(mouse_event) => match mouse_event.kind {
                 MouseEventKind::ScrollDown => Inputs {
                     scroll_dir: Some(ScrollDirection::Forward),
-                    cursor_location: (mouse_event.column, mouse_event.row),
                     ..Default::default()
                 },
                 MouseEventKind::ScrollUp => Inputs {
                     scroll_dir: Some(ScrollDirection::Backward),
-                    cursor_location: (mouse_event.column, mouse_event.row),
+                    ..Default::default()
+                },
+                MouseEventKind::Moved => Inputs {
+                    mouse_loc: Some((mouse_event.column, mouse_event.row)),
                     ..Default::default()
                 },
                 _ => Inputs {
-                    cursor_location: (mouse_event.column, mouse_event.row),
                     ..Default::default()
                 },
             },
