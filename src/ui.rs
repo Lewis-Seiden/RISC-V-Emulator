@@ -71,6 +71,7 @@ impl GUI {
             ..Default::default()
         };
         loop {
+            self.terminal.autoresize()?;
             let mut log_event = None;
             let inputs = if poll(Duration::from_millis(100)).is_ok_and(|has_event| has_event) {
                 if let Ok(event) = read() {
@@ -138,7 +139,7 @@ impl GUI {
         gui_state: &mut GUIState,
         inputs: &Inputs,
     ) {
-        let columns = Layout::horizontal([Constraint::Min(6), Constraint::Min(0)]);
+        let columns = Layout::horizontal([Constraint::Fill(1), Constraint::Min(3 * 16 + 8 + 4)]);
         let [register_area, main_area] = columns.areas(frame.area());
         let rhs_rows = Layout::vertical([Constraint::Fill(1), Constraint::Length(8)]);
         let [mem_area, control_area] = rhs_rows.areas(main_area);
@@ -173,6 +174,9 @@ impl GUI {
             .mem_scroll_pos
             .clamp(0, mem.len() - mem_area.height as usize + 2);
         let mem_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
+        let mem_table_even_style: Style = Style::new();
+        let mem_table_odd_style: Style = Style::new().underlined();
+
         let mem_table = Table::new(
             (0..mem_area.height as usize - 2).map(|i| {
                 let start_addr = (gui_state.mem_scroll_pos + i) * 16;
@@ -180,10 +184,14 @@ impl GUI {
                 for offset in 0..16 {
                     cols.push(Cell::new(format!("{:02x}|", mem[start_addr + offset])));
                 }
-                Row::new(cols)
+                Row::new(cols).style(if i % 2 == 0 {
+                    mem_table_even_style
+                } else {
+                    mem_table_odd_style
+                })
             }),
             [
-                vec![Constraint::Fill(1)],
+                vec![Constraint::Min(10)],
                 vec![Constraint::Length(3); 16],
                 vec![Constraint::Length(1)],
             ]
@@ -202,7 +210,6 @@ impl GUI {
             .reversed()
             .not_underlined(),
         )
-        .underlined()
         .row_highlight_style(Style::new().fg(Color::Black).bg(Color::Gray));
 
         frame.render_stateful_widget(
