@@ -260,6 +260,18 @@ impl Instruction {
     }
 }
 
+impl Instruction {
+    pub fn nop() -> Self {
+        Instruction::ADDI {
+            data: I {
+                rd: 0,
+                rs1: 0,
+                imm: SmallImmediate::from(0),
+            },
+        }
+    }
+}
+
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(
@@ -274,6 +286,7 @@ impl Display for Instruction {
     }
 }
 
+#[derive(Clone)]
 pub struct ArchState {
     regs: [u32; 31], // x0 is handled in the getter
     pub pc: i64,     // must be able to be negative so we can jump to 0
@@ -291,13 +304,7 @@ fn transmute_to_unsigned(signed: i32) -> u32 {
 pub fn interpret_bytes(bytes: u32) -> Instruction {
     let opcode = bytes & 0b1111111;
     let func3 = (bytes & (0b111 << 12)) >> 12;
-    let nop = Instruction::ADDI {
-        data: I {
-            rd: 0,
-            rs1: 0,
-            imm: SmallImmediate::from(0),
-        },
-    };
+
     match opcode {
         0b0110011 => {
             // integer register to register
@@ -318,7 +325,7 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
                 0b1101 => Instruction::SRA { data },
                 0b0110 | 1110 => Instruction::OR { data },
                 0b0111 | 1111 => Instruction::AND { data },
-                _ => nop,
+                _ => Instruction::nop(),
             }
         }
         0b0010011 => {
@@ -344,7 +351,7 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
                         Instruction::SRAI { data }
                     }
                 }
-                _ => nop,
+                _ => Instruction::nop(),
             }
         }
         0b0100011 => {
@@ -358,7 +365,7 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
                 0b000 => Instruction::SB { data },
                 0b001 => Instruction::SH { data },
                 0b010 => Instruction::SW { data },
-                _ => nop,
+                _ => Instruction::nop(),
             }
         }
         0b0000011 => {
@@ -374,7 +381,7 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
                 0b010 => Instruction::LW { data },
                 0b100 => Instruction::LBU { data },
                 0b101 => Instruction::LHU { data },
-                _ => nop,
+                _ => Instruction::nop(),
             }
         }
         0b1100111 => {
@@ -407,7 +414,7 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
                 0b101 => Instruction::BGE { data },
                 0b110 => Instruction::BLTU { data },
                 0b111 => Instruction::BGEU { data },
-                _ => nop,
+                _ => Instruction::nop(),
             }
         }
         0b1101111 => {
@@ -443,7 +450,7 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
             }
         }
         // unknown instruction so no-op
-        _ => nop,
+        _ => Instruction::nop(),
     }
 }
 
@@ -793,12 +800,24 @@ impl ArchState {
         self.pc += 4;
     }
 
-    pub fn tick(&mut self) {
-        self.apply(&interpret_bytes(u32::from_be_bytes([
+    pub fn get_instruction(&self) -> Option<Instruction> {
+        if self.pc as usize + 4 >= self.mem.len() {
+            return None;
+        }
+        Some(interpret_bytes(u32::from_be_bytes([
             self.mem[self.pc as usize],
             self.mem[self.pc as usize + 1],
             self.mem[self.pc as usize + 2],
             self.mem[self.pc as usize + 3],
-        ])));
+        ])))
+    }
+
+    pub fn tick(&mut self) -> Result<(), ()> {
+        let inst = match self.get_instruction() {
+            Some(inst) => inst,
+            None => return Err(()),
+        };
+        self.apply(&inst);
+        Ok(())
     }
 }

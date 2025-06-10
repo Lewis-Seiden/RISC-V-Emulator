@@ -1,4 +1,8 @@
-use std::{error::Error, io::Stdout, time::Duration};
+use std::{
+    error::Error, io::Stdout, os::linux::raw::stat, sync::{
+        mpsc::{Receiver, Sender}, Arc, Mutex
+    }, thread, time::Duration
+};
 
 use ratatui::{
     Frame, Terminal,
@@ -23,8 +27,9 @@ use crate::vm::{self, ArchState, Instruction};
 pub struct GUI {
     pause: bool,
     step: bool,
-    arch_state: ArchState,
     terminal: Terminal<CrosstermBackend<Stdout>>,
+    pause_sender: Sender<bool>,
+    step_sender: Sender<()>,
 }
 
 #[derive(Default, Debug)]
@@ -46,31 +51,34 @@ struct Inputs {
 }
 
 impl GUI {
-    pub fn new() -> Self {
-        Self {
-            pause: true,
-            step: false,
-            arch_state: ArchState::new(),
-            terminal: ratatui::init(),
-        }
+    /// (GUI, Pause Reciever, Step Receiver)
+    /// Pause reveiver will send a boolean indicating execution should be paused when the value changes
+    /// Step reciever will send a blank value when a step should be executed, and should not send when unpaused
+    pub fn new() -> (Self, Receiver<bool>, Receiver<()>) {
+        let (pause_sender, pause_recv) = std::sync::mpsc::channel();
+        let (step_sender, step_recv) = std::sync::mpsc::channel();
+        (
+            Self {
+                pause: true,
+                step: false,
+                terminal: ratatui::init(),
+                pause_sender,
+                step_sender,
+            },
+            pause_recv,
+            step_recv,
+        )
     }
 
-    pub fn load(mut self, program: Vec<u8>, offset: usize) -> Self {
-        self.arch_state.load(program, offset);
-        self
-    }
-
-    pub fn get_state(&self) -> &ArchState {
-        return &self.arch_state;
-    }
-
-    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn run(&mut self, state_mutex: Arc<Mutex<ArchState>>) -> Result<(), Box<dyn Error>> {
         execute!(std::io::stdout(), EnableMouseCapture)?;
         let mut gui_state = GUIState {
             mem_table_state: TableState::new(),
             ..Default::default()
         };
+
         loop {
+            let arch_state = state_mutex.lock().unwrap();
             self.terminal.autoresize()?;
             let mut log_event = None;
             let inputs = if poll(Duration::from_millis(100)).is_ok_and(|has_event| has_event) {
@@ -92,22 +100,17 @@ impl GUI {
                 GUI::draw(
                     frame,
                     self.pause,
-                    self.arch_state.pc as usize,
-                    &(0..32).map(|i| self.arch_state.get_register(i)).collect(),
-                    &vm::interpret_bytes(u32::from_be_bytes([
-                        self.arch_state.mem[self.arch_state.pc as usize],
-                        self.arch_state.mem[self.arch_state.pc as usize + 1],
-                        self.arch_state.mem[self.arch_state.pc as usize + 2],
-                        self.arch_state.mem[self.arch_state.pc as usize + 3],
-                    ])),
-                    &self.arch_state.mem,
+                    arch_state.pc as usize,
+                    &(0..32).map(|i| arch_state.get_register(i)).collect(),
+                    &arch_state.get_instruction().unwrap_or(Instruction::nop()),
+                    &arch_state.mem,
                     &mut gui_state,
                     &inputs,
                 );
 
                 if cfg!(debug_assertions) {
                     frame.render_widget(
-                        Text::raw(format!("{:?} {:?}", inputs, log_event)),
+                        Text::raw(format!("{:?} {:?} {:?}", inputs, log_event, self.pause)),
                         frame.area(),
                     )
                 };
@@ -120,10 +123,20 @@ impl GUI {
             self.step = inputs.step;
             self.pause = self.pause != inputs.toggle_pause;
 
+            if inputs.toggle_pause {
+                let _ = self.pause_sender.send(self.pause);
+            }
+
+            if self.step && self.pause {
+                let _ = self.step_sender.send(());
+                let _ = self.pause_sender.send(self.pause);
+            }
+
             if self.step || !self.pause {
-                self.arch_state.tick();
                 self.step = false;
             }
+            drop(arch_state);
+            thread::sleep(Duration::from_millis(50));
         }
         execute!(std::io::stdout(), DisableMouseCapture)?;
         Ok(())
@@ -172,7 +185,7 @@ impl GUI {
         // Memory readout
         gui_state.mem_scroll_pos = gui_state
             .mem_scroll_pos
-            .clamp(0, mem.len() - mem_area.height as usize + 2);
+            .clamp(0, mem.len().saturating_sub(mem_area.height as usize) + 2);
         let mem_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
         let mem_table_even_style: Style = Style::new();
         let mem_table_odd_style: Style = Style::new().underlined();
@@ -182,7 +195,7 @@ impl GUI {
                 let start_addr = (gui_state.mem_scroll_pos + i) * 16;
                 let mut cols = vec![Cell::new(format!("{:08x}", start_addr))];
                 for offset in 0..16 {
-                    cols.push(Cell::new(format!("{:02x}|", mem[start_addr + offset])));
+                    cols.push(Cell::new(format!("{:02x}|", mem.get(start_addr + offset).unwrap_or(&0))));
                 }
                 Row::new(cols).style(if i % 2 == 0 {
                     mem_table_even_style
