@@ -10,7 +10,7 @@ use ratatui::{
     },
     layout::{Constraint, Layout, Margin, Position, Rect},
     prelude::CrosstermBackend,
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
     text::Text,
     widgets::{
         Block, Cell, Row, ScrollDirection, Scrollbar, ScrollbarOrientation, ScrollbarState, Table,
@@ -174,17 +174,35 @@ impl GUI {
             .clamp(0, mem.len() - mem_area.height as usize + 2);
         let mem_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
         let mem_table = Table::new(
-            mem[gui_state.mem_scroll_pos..gui_state.mem_scroll_pos + mem_area.height as usize - 2]
-                .iter()
-                .enumerate()
-                .map(|(i, byte)| {
-                    Row::new([
-                        Cell::new(format!("{:x}", i + gui_state.mem_scroll_pos)),
-                        Cell::new(format!("{:x}", byte)),
-                    ])
-                }),
-            [Constraint::Fill(1), Constraint::Length(2)],
+            (0..mem_area.height as usize - 2).map(|i| {
+                let start_addr = (gui_state.mem_scroll_pos + i) * 16;
+                let mut cols = vec![Cell::new(format!("{:08x}", start_addr))];
+                for offset in 0..16 {
+                    cols.push(Cell::new(format!("{:02x}|", mem[start_addr + offset])));
+                }
+                Row::new(cols)
+            }),
+            [
+                vec![Constraint::Fill(1)],
+                vec![Constraint::Length(3); 16],
+                vec![Constraint::Length(1)],
+            ]
+            .concat(),
         )
+        .header(
+            Row::new(
+                [
+                    vec![Cell::new("--------")],
+                    (0..16)
+                        .map(|i| Cell::new(format!("{:02x}", i)))
+                        .collect::<Vec<Cell>>(),
+                ]
+                .concat(),
+            )
+            .reversed()
+            .not_underlined(),
+        )
+        .underlined()
         .row_highlight_style(Style::new().fg(Color::Black).bg(Color::Gray));
 
         frame.render_stateful_widget(
@@ -203,7 +221,7 @@ impl GUI {
         let [pc_area, reg_table_area] =
             Layout::vertical([Constraint::Length(2), Constraint::Fill(1)])
                 .areas(register_area_block.inner(register_area));
-        
+
         gui_state.reg_scroll_pos = gui_state
             .reg_scroll_pos
             .clamp(0, 32_usize.saturating_sub(reg_table_area.height as usize));
