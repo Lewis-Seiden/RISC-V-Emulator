@@ -1,7 +1,13 @@
 use std::{
-    error::Error, io::Stdout, os::linux::raw::stat, sync::{
-        mpsc::{Receiver, Sender}, Arc, Mutex
-    }, thread, time::Duration
+    error::Error,
+    io::Stdout,
+    os::linux::raw::stat,
+    sync::{
+        Arc, Mutex,
+        mpsc::{Receiver, Sender},
+    },
+    thread,
+    time::Duration,
 };
 
 use ratatui::{
@@ -195,7 +201,10 @@ impl GUI {
                 let start_addr = (gui_state.mem_scroll_pos + i) * 16;
                 let mut cols = vec![Cell::new(format!("{:08x}", start_addr))];
                 for offset in 0..16 {
-                    cols.push(Cell::new(format!("{:02x}|", mem.get(start_addr + offset).unwrap_or(&0))));
+                    cols.push(Cell::new(format!(
+                        "{:02x}|",
+                        mem.get(start_addr + offset).unwrap_or(&0)
+                    )));
                 }
                 Row::new(cols).style(if i % 2 == 0 {
                     mem_table_even_style

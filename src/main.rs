@@ -37,6 +37,7 @@ fn run_tui_with_example() -> Result<(), Box<dyn Error>> {
 
     let arch_state_mutex = Arc::clone(&state_mutex);
     let _ = thread::spawn(move || {
+        let mut inst_count = vec![];
         let mut pause = true;
         while quit_rx.try_recv().is_err() {
             while pause && step_rx.try_recv().is_err() {
@@ -45,11 +46,13 @@ fn run_tui_with_example() -> Result<(), Box<dyn Error>> {
                     Err(_) => {}
                 }
             }
+            inst_count += 1;
             match arch_state_mutex.lock().unwrap().tick() {
                 Ok(_) => {}
                 Err(_) => break,
             }
         }
+        println!("instructions run {}", inst_count)
     });
 
     gui.run(Arc::clone(&state_mutex))?;
