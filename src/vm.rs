@@ -317,14 +317,14 @@ pub fn interpret_bytes(bytes: u32) -> Instruction {
             match func3 + (bytes >> 27) {
                 0b0000 => Instruction::ADD { data },
                 0b1000 => Instruction::SUB { data },
-                0b0001 | 1001 => Instruction::SLL { data },
-                0b0010 | 1010 => Instruction::SLT { data },
-                0b0011 | 1011 => Instruction::SLTU { data },
-                0b0100 | 1100 => Instruction::XOR { data },
+                0b0001 | 0b1001 => Instruction::SLL { data },
+                0b0010 | 0b1010 => Instruction::SLT { data },
+                0b0011 | 0b1011 => Instruction::SLTU { data },
+                0b0100 | 0b1100 => Instruction::XOR { data },
                 0b0101 => Instruction::SRL { data },
                 0b1101 => Instruction::SRA { data },
-                0b0110 | 1110 => Instruction::OR { data },
-                0b0111 | 1111 => Instruction::AND { data },
+                0b0110 | 0b1110 => Instruction::OR { data },
+                0b0111 | 0b1111 => Instruction::AND { data },
                 _ => Instruction::nop(),
             }
         }
