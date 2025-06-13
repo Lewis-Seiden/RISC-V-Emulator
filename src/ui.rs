@@ -4,7 +4,7 @@ use std::{
     os::linux::raw::stat,
     sync::{
         Arc, Mutex,
-        mpsc::{Receiver, Sender},
+        mpsc::{Receiver, Sender, channel},
     },
     thread,
     time::Duration,
@@ -76,7 +76,43 @@ impl GUI {
         )
     }
 
-    pub fn run(&mut self, state_mutex: Arc<Mutex<ArchState>>) -> Result<(), Box<dyn Error>> {
+    pub fn run_tui(to_load: Vec<(Vec<u8>, usize)>) -> Result<(), Box<dyn Error>> {
+        let mut state = ArchState::new();
+        for data in to_load {
+            state.load(data.0, data.1);
+        }
+
+        let (mut gui, pause_rx, step_rx) = GUI::new();
+
+        let state_mutex = Arc::new(Mutex::new(state));
+        let (quit_tx, quit_rx) = channel();
+
+        let arch_state_mutex = Arc::clone(&state_mutex);
+        let _ = thread::spawn(move || {
+            let mut inst_count = 0;
+            let mut pause = true;
+            while quit_rx.try_recv().is_err() {
+                while pause && step_rx.try_recv().is_err() {
+                    match pause_rx.recv() {
+                        Ok(b) => pause = b,
+                        Err(_) => {}
+                    }
+                }
+                inst_count += 1;
+                match arch_state_mutex.lock().unwrap().tick() {
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+            println!("instructions run {}", inst_count)
+        });
+
+        gui.run_ui(Arc::clone(&state_mutex))?;
+        quit_tx.send(())?;
+        Ok(())
+    }
+
+    fn run_ui(&mut self, state_mutex: Arc<Mutex<ArchState>>) -> Result<(), Box<dyn Error>> {
         execute!(std::io::stdout(), EnableMouseCapture)?;
         let mut gui_state = GUIState {
             mem_table_state: TableState::new(),
